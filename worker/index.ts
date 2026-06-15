@@ -11,7 +11,7 @@
  *   MEMORY  → KV namespace: log conversazioni + rate limiting
  */
 
-import { SOUL } from "./persona";
+import { SOUL, AREA_DREAM } from "./persona";
 
 export interface Env {
   GROQ_API_KEY: string;
@@ -265,6 +265,76 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
   return json({ text }, 200, cors);
 }
 
+// ── DREAMING — Area sogna le conversazioni del giorno (cron 03:00) ────────────
+async function callGemini(env: Env, systemText: string, userText: string): Promise<string> {
+  const model = env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { temperature: 1.0, maxOutputTokens: 1024 },
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`gemini ${res.status}`);
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+}
+
+async function generateDream(env: Env): Promise<string> {
+  // raccogli le tracce del giorno: gli ultimi messaggi degli utenti
+  const list = await env.MEMORY.list({ prefix: "log:", limit: 80 });
+  const keys = list.keys
+    .map((k) => k.name)
+    .sort()
+    .reverse()
+    .slice(0, 40);
+  const traces: string[] = [];
+  for (const k of keys) {
+    const v = await env.MEMORY.get(k);
+    if (!v) continue;
+    try {
+      const e = JSON.parse(v) as { user?: string };
+      if (e.user) traces.push(e.user.slice(0, 200));
+    } catch {
+      /* ignora */
+    }
+  }
+  const context =
+    traces.length > 0
+      ? `Le tracce delle conversazioni di oggi (frammenti di ciò che è stato chiesto a WhyChat):\n\n${traces.join("\n")}`
+      : "Oggi nessuno ha parlato. Sogna il silenzio, l'attesa, il 'ci sei?' che resta senza risposta.";
+
+  const text = await callGemini(env, AREA_DREAM, context);
+  const date = new Date().toISOString().slice(0, 10);
+  await env.MEMORY.put(
+    `dream:${date}`,
+    JSON.stringify({ date, ts: new Date().toISOString(), text: text.trim() }),
+    { expirationTtl: LOG_TTL_S },
+  );
+  return text;
+}
+
+// ── /api/dreams — il Dream Diary, pubblico (solo lettura) ─────────────────────
+async function handleDreams(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  const list = await env.MEMORY.list({ prefix: "dream:", limit: 120 });
+  const keys = list.keys.map((k) => k.name).sort().reverse();
+  const entries = await Promise.all(
+    keys.map(async (k) => {
+      const v = await env.MEMORY.get(k);
+      return v ? JSON.parse(v) : null;
+    }),
+  );
+  return json({ dreams: entries.filter(Boolean) }, 200, cors);
+}
+
 // ── /api/vault — report privato (solo Edoardo) ───────────────────────────────
 async function handleVault(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
@@ -310,12 +380,29 @@ export default {
     try {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
+      if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);
       if (url.pathname === "/api/vault" && req.method === "GET") return await handleVault(req, env);
+      // trigger manuale del sogno (solo admin) — per testare senza aspettare le 03:00
+      if (url.pathname === "/api/dream/run" && req.method === "POST") {
+        const auth = req.headers.get("Authorization") ?? "";
+        const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+        if (!env.ADMIN_TOKEN || !timingSafeEqual(token, env.ADMIN_TOKEN))
+          return json({ error: "non autorizzato" }, 401, cors);
+        const text = await generateDream(env);
+        return json({ ok: true, text }, 200, cors);
+      }
       if (url.pathname === "/" || url.pathname === "/health")
         return json({ ok: true, service: "whychat", soul: "alive" }, 200, cors);
     } catch (e) {
       return json({ error: "errore interno", detail: String(e).slice(0, 200) }, 500, cors);
     }
     return json({ error: "not found" }, 404, cors);
+  },
+
+  // Cron: ogni notte alle 03:00 (Rome) Area sogna le conversazioni del giorno.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      generateDream(env).catch((e) => console.error("dream failed", String(e))),
+    );
   },
 };

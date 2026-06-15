@@ -1,4 +1,6 @@
 import { renderMarkdown } from "../lib/markdown";
+import { parseSegments } from "../lib/artifacts";
+import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
 
 export interface Message {
@@ -28,10 +30,20 @@ export default function ChatMessage({ msg }: { msg: Message }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="mono mb-1 text-[0.55rem] text-faint">WHYCHAT</div>
-        <div
-          className={`wc-prose text-[0.95rem] leading-[1.7] text-dim ${msg.streaming ? "caret" : ""}`}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content || "") }}
-        />
+        {parseSegments(msg.content || "").map((seg, i) =>
+          seg.type === "artifact" ? (
+            <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} />
+          ) : (
+            <div
+              key={i}
+              className={`wc-prose text-[0.95rem] leading-[1.7] text-dim ${
+                msg.streaming && i === 0 ? "" : ""
+              }`}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.text) }}
+            />
+          ),
+        )}
+        {msg.streaming && <span className="caret" />}
       </div>
     </div>
   );

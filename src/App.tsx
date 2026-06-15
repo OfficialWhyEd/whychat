@@ -4,6 +4,7 @@ import WhyMark from "./components/WhyMark";
 import Composer from "./components/Composer";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
+import Dreams from "./components/Dreams";
 import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
 import { OPENERS } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
@@ -19,6 +20,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", f);
   }, []);
   if (route === "#vault") return <Vault />;
+  if (route === "#dreams") return <Dreams />;
 
   return <Chat />;
 }
@@ -119,12 +121,21 @@ function Chat() {
             </div>
           </div>
         </div>
-        <button
-          onClick={askName}
-          className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
-        >
-          {name ? `↳ ${name}` : "PRESENTATI"}
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="#dreams"
+            title="Il sogno di Area"
+            className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-ember"
+          >
+            ☾ SOGNI
+          </a>
+          <button
+            onClick={askName}
+            className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+          >
+            {name ? `↳ ${name}` : "PRESENTATI"}
+          </button>
+        </div>
       </header>
 
       {/* Conversazione */}

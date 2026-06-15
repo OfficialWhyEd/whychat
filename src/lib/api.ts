@@ -56,6 +56,20 @@ export async function streamChat(
   }
 }
 
+export interface Dream {
+  date: string;
+  ts: string;
+  text: string;
+}
+
+/** Il Dream Diary di Area (pubblico, solo lettura). */
+export async function fetchDreams(): Promise<Dream[]> {
+  const res = await fetch(`${WORKER_URL}/api/dreams`);
+  if (!res.ok) throw new Error(`errore ${res.status}`);
+  const data = (await res.json()) as { dreams?: Dream[] };
+  return data.dreams ?? [];
+}
+
 /** Modalità pensiero profondo (Gemini, risposta intera). */
 export async function deepThink(messages: ChatMessage[]): Promise<string> {
   const res = await fetch(`${WORKER_URL}/api/think`, {

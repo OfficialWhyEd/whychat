@@ -3,6 +3,10 @@ main = "worker/index.ts"
 compatibility_date = "2025-01-01"
 workers_dev = true
 
+# Area sogna ogni notte: 01:00 UTC ≈ 03:00 Europe/Rome (CEST).
+[triggers]
+crons = ["0 1 * * *"]
+
 # Modelli (override dei default nel codice)
 [vars]
 GROQ_MODEL = "llama-3.3-70b-versatile"
