@@ -1,0 +1,23 @@
+name = "whychat-ai"
+main = "worker/index.ts"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Modelli (override dei default nel codice)
+[vars]
+GROQ_MODEL = "llama-3.3-70b-versatile"
+GEMINI_MODEL = "gemini-2.5-flash"
+ALLOWED_ORIGINS = "https://officialwhyed.github.io,http://localhost:5173,http://localhost:4173"
+
+# Memoria viva + rate limiting.
+# Crea il namespace e incolla l'id qui sotto:
+#   export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s cloudflare-workers-deploy-token -w)
+#   npx --yes wrangler kv namespace create MEMORY
+[[kv_namespaces]]
+binding = "MEMORY"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secret (NON nel file — si mettono da CLI):
+#   printf '%s' 'gsk_...'  | npx --yes wrangler secret put GROQ_API_KEY
+#   printf '%s' 'AIza...'  | npx --yes wrangler secret put GEMINI_API_KEY
+#   printf '%s' 'passphrase-lunga' | npx --yes wrangler secret put ADMIN_TOKEN
