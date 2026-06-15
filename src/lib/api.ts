@@ -62,7 +62,7 @@ export interface Dream {
   text: string;
 }
 
-/** Il Dream Diary di Area (pubblico, solo lettura). */
+/** Il sogno di WhyChat (pubblico, solo lettura). */
 export async function fetchDreams(): Promise<Dream[]> {
   const res = await fetch(`${WORKER_URL}/api/dreams`);
   if (!res.ok) throw new Error(`errore ${res.status}`);

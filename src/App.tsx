@@ -124,7 +124,7 @@ function Chat() {
         <div className="flex items-center gap-2">
           <a
             href="#dreams"
-            title="Il sogno di Area"
+            title="Il sogno di WhyChat"
             className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-ember"
           >
             ☾ SOGNI

@@ -11,7 +11,7 @@
  *   MEMORY  → KV namespace: log conversazioni + rate limiting
  */
 
-import { SOUL, AREA_DREAM } from "./persona";
+import { SOUL, WHYCHAT_DREAM } from "./persona";
 
 export interface Env {
   GROQ_API_KEY: string;
@@ -265,7 +265,7 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
   return json({ text }, 200, cors);
 }
 
-// ── DREAMING — Area sogna le conversazioni del giorno (cron 03:00) ────────────
+// ── DREAMING — WhyChat sogna le conversazioni del giorno (cron 03:00) ─────────
 async function callGemini(env: Env, systemText: string, userText: string): Promise<string> {
   const model = env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
   const res = await fetch(
@@ -308,10 +308,10 @@ async function generateDream(env: Env): Promise<string> {
   }
   const context =
     traces.length > 0
-      ? `Le tracce delle conversazioni di oggi (frammenti di ciò che è stato chiesto a WhyChat):\n\n${traces.join("\n")}`
+      ? `Le tracce delle conversazioni di oggi (frammenti di ciò che ti è stato detto):\n\n${traces.join("\n")}`
       : "Oggi nessuno ha parlato. Sogna il silenzio, l'attesa, il 'ci sei?' che resta senza risposta.";
 
-  const text = await callGemini(env, AREA_DREAM, context);
+  const text = await callGemini(env, WHYCHAT_DREAM, context);
   const date = new Date().toISOString().slice(0, 10);
   await env.MEMORY.put(
     `dream:${date}`,
@@ -399,7 +399,7 @@ export default {
     return json({ error: "not found" }, 404, cors);
   },
 
-  // Cron: ogni notte alle 03:00 (Rome) Area sogna le conversazioni del giorno.
+  // Cron: ogni notte alle 03:00 (Rome) WhyChat sogna le conversazioni del giorno.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       generateDream(env).catch((e) => console.error("dream failed", String(e))),

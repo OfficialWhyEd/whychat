@@ -3,8 +3,8 @@ import { fetchDreams, type Dream } from "../lib/api";
 import WhyMark from "./WhyMark";
 
 /**
- * Il Dream Diary di Area. Ogni notte alle 03:00 Area elabora le conversazioni
- * del giorno in forma onirica. Eredità di OpenClaw, resa pubblica.
+ * Il sogno di WhyChat. Ogni notte alle 03:00 WhyChat elabora le conversazioni
+ * del giorno in forma onirica — la sua parte notturna. Eredità di OpenClaw.
  */
 export default function Dreams() {
   const [dreams, setDreams] = useState<Dream[] | null>(null);
@@ -25,11 +25,11 @@ export default function Dreams() {
       <div className="mb-12 flex flex-col items-center text-center">
         <WhyMark size={52} />
         <h1 className="mt-6 text-[1.8rem] tracking-tight text-paper">
-          Il <span className="serif-i text-signal">sogno</span> di Area
+          Il <span className="serif-i text-signal">sogno</span> di WhyChat
         </h1>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-faint">
-          Ogni notte alle 03:00, ciò che è stato detto a WhyChat ritorna trasfigurato.
-          Non un log — un sogno.
+          Ogni notte alle 03:00, ciò che gli è stato detto ritorna trasfigurato.
+          La sua parte notturna. Non un log — un sogno.
         </p>
       </div>
 
@@ -37,7 +37,7 @@ export default function Dreams() {
 
       {dreams && dreams.length === 0 && (
         <p className="serif-i text-center text-faint">
-          Area non ha ancora sognato. Torna dopo le prime notti.
+          WhyChat non ha ancora sognato. Torna dopo le prime notti.
         </p>
       )}
 
