@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import InkReveal from "./components/InkReveal";
+import OriginButton from "./components/OriginButton";
 import WhyMark from "./components/WhyMark";
 import Composer from "./components/Composer";
 import ChatMessage, { type Message } from "./components/ChatMessage";
@@ -196,13 +197,14 @@ function Hero({ onPick }: { onPick: (t: string) => void }) {
 
       <div className="mt-9 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
         {OPENERS.map((o) => (
-          <button
+          <OriginButton
             key={o}
             onClick={() => onPick(o)}
-            className="glass glass-sheen rounded-2xl px-4 py-3 text-left text-[0.85rem] text-dim transition hover:text-paper"
+            fill="rgba(201,75,37,0.22)"
+            className="glass glass-sheen rounded-2xl px-4 py-3 text-[0.85rem] text-dim transition hover:text-paper"
           >
-            {o}
-          </button>
+            <span className="w-full text-left">{o}</span>
+          </OriginButton>
         ))}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import OriginButton from "./OriginButton";
 
 interface Props {
   onSend: (text: string) => void;
@@ -67,18 +68,21 @@ export default function Composer({ onSend, disabled, deep, onToggleDeep, onStop,
             <span className="block h-3 w-3 rounded-[3px] bg-paper" />
           </button>
         ) : (
-          <button
+          <OriginButton
             onClick={submit}
             disabled={disabled || !value.trim()}
             title="Invia"
-            className="group relative mb-0.5 grid h-10 w-10 place-items-center overflow-hidden rounded-full transition disabled:opacity-35"
-            style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)" }}
+            fill="#a73c1c"
+            className="mb-0.5 grid h-10 w-10 place-items-center rounded-full transition disabled:opacity-35"
           >
-            <span className="absolute inset-0 origin-bottom scale-y-0 bg-[#a73c1c] transition-transform duration-300 group-hover:scale-y-100" />
-            <svg className="relative z-10" width="17" height="17" viewBox="0 0 24 24" fill="none">
+            <span
+              className="absolute inset-0 rounded-full"
+              style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)", zIndex: -1 }}
+            />
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
               <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#0a0908" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          </button>
+          </OriginButton>
         )}
       </div>
     </div>
