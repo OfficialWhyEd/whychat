@@ -62,16 +62,26 @@ body {
 .glass {
   background: linear-gradient(
     180deg,
-    rgba(242, 239, 233, 0.07) 0%,
-    rgba(242, 239, 233, 0.025) 100%
+    rgba(242, 239, 233, 0.06) 0%,
+    rgba(242, 239, 233, 0.02) 100%
   );
-  backdrop-filter: blur(20px) saturate(160%);
+  /* Safari: frosted classico (no displacement url() affidabile) */
   -webkit-backdrop-filter: blur(20px) saturate(160%);
+  /* Chromium/Firefox: liquid glass — lo sfondo viene rifratto dal filtro SVG */
+  backdrop-filter: blur(13px) saturate(150%) url(#liquid-glass-displace);
   border: 1px solid rgba(242, 239, 233, 0.12);
   box-shadow:
-    inset 0 1px 0 rgba(242, 239, 233, 0.14),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0.5px rgba(255, 252, 247, 0.22),
+    inset 0 0 0 1px rgba(242, 239, 233, 0.04),
+    inset 0 -10px 22px -14px rgba(0, 0, 0, 0.55),
     0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* Fallback: se il browser non sa fare displacement sul backdrop, resta frosted pulito. */
+@supports not (backdrop-filter: blur(1px) url(#liquid-glass-displace)) {
+  .glass {
+    backdrop-filter: blur(20px) saturate(160%);
+  }
 }
 
 .glass-sheen {
