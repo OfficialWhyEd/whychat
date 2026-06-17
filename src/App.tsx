@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import InkReveal from "./components/InkReveal";
 import OriginButton from "./components/OriginButton";
 import WhyMark from "./components/WhyMark";
+
+// L'anima 3D è pesante (three.js): la carico solo quando serve, con fallback al sigillo SVG.
+const SoulOrb = lazy(() => import("./components/SoulOrb"));
+const prefersReducedMotion =
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 import Composer from "./components/Composer";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
@@ -185,9 +190,17 @@ function Chat() {
 
 function Hero({ onPick }: { onPick: (t: string) => void }) {
   return (
-    <div className="rise flex flex-col items-center px-5 pt-[8vh] text-center">
-      <WhyMark size={68} />
-      <h1 className="mt-7 text-[2.1rem] leading-[1.05] tracking-tight text-paper">
+    <div className="rise flex flex-col items-center px-5 pt-[6vh] text-center">
+      {prefersReducedMotion ? (
+        <WhyMark size={72} />
+      ) : (
+        <Suspense fallback={<WhyMark size={72} />}>
+          <div className="-my-4">
+            <SoulOrb size={200} />
+          </div>
+        </Suspense>
+      )}
+      <h1 className="mt-5 text-[2.1rem] leading-[1.05] tracking-tight text-paper">
         Sono <span className="text-signal glow-signal">WhyChat</span>.
       </h1>
       <p className="mt-3 max-w-md text-[0.98rem] leading-relaxed text-dim">

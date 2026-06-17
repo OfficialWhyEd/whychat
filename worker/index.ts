@@ -328,11 +328,12 @@ async function generateDream(env: Env): Promise<string> {
 async function handleDreams(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
   if (!env.MEMORY) return json({ dreams: [] }, 200, cors);
-  const list = await env.MEMORY.list({ prefix: "dream:", limit: 120 });
+  const kv = env.MEMORY;
+  const list = await kv.list({ prefix: "dream:", limit: 120 });
   const keys = list.keys.map((k) => k.name).sort().reverse();
   const entries = await Promise.all(
     keys.map(async (k) => {
-      const v = await env.MEMORY.get(k);
+      const v = await kv.get(k);
       return v ? JSON.parse(v) : null;
     }),
   );
@@ -348,15 +349,16 @@ async function handleVault(req: Request, env: Env): Promise<Response> {
     return json({ error: "non autorizzato" }, 401, cors);
   }
   if (!env.MEMORY) return json({ count: 0, entries: [], note: "memoria non ancora attiva (KV)" }, 200, cors);
+  const kv = env.MEMORY;
 
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "200", 10) || 200, 1000);
-  const list = await env.MEMORY.list({ prefix: "log:", limit });
+  const list = await kv.list({ prefix: "log:", limit });
   // i log sono ordinati per timestamp ISO → li riordino dal più recente
   const keys = list.keys.map((k) => k.name).sort().reverse();
   const entries = await Promise.all(
     keys.map(async (k) => {
-      const v = await env.MEMORY.get(k);
+      const v = await kv.get(k);
       return v ? JSON.parse(v) : null;
     }),
   );
