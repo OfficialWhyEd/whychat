@@ -17,7 +17,7 @@ export interface Env {
   GROQ_API_KEY: string;
   GEMINI_API_KEY: string;
   ADMIN_TOKEN: string;
-  MEMORY: KVNamespace;
+  MEMORY?: KVNamespace; // opzionale: se assente, memoria/vault/sogni sono disattivati ma chat+think funzionano
   ALLOWED_ORIGINS?: string; // CSV, es. "https://officialwhyed.github.io,http://localhost:5173"
   GROQ_MODEL?: string;
   GEMINI_MODEL?: string;
@@ -89,6 +89,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 async function rateLimited(req: Request, env: Env): Promise<boolean> {
+  if (!env.MEMORY) return false; // senza KV non c'è rate limit persistente
   const ip = req.headers.get("CF-Connecting-IP") ?? "0.0.0.0";
   const key = `rate:${await sha256(ip)}`;
   const current = parseInt((await env.MEMORY.get(key)) ?? "0", 10);
@@ -121,6 +122,7 @@ async function logTurn(
   userMessage: string,
   assistantText: string,
 ) {
+  if (!env.MEMORY) return; // memoria disattivata finché non c'è il KV
   const ts = new Date().toISOString();
   const ipHash = (await sha256(req.headers.get("CF-Connecting-IP") ?? "")).slice(0, 12);
   const country = (req as { cf?: { country?: string } }).cf?.country ?? "??";
@@ -288,6 +290,7 @@ async function callGemini(env: Env, systemText: string, userText: string): Promi
 }
 
 async function generateDream(env: Env): Promise<string> {
+  if (!env.MEMORY) return ""; // niente KV → niente sogni persistenti
   // raccogli le tracce del giorno: gli ultimi messaggi degli utenti
   const list = await env.MEMORY.list({ prefix: "log:", limit: 80 });
   const keys = list.keys
@@ -324,6 +327,7 @@ async function generateDream(env: Env): Promise<string> {
 // ── /api/dreams — il Dream Diary, pubblico (solo lettura) ─────────────────────
 async function handleDreams(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
+  if (!env.MEMORY) return json({ dreams: [] }, 200, cors);
   const list = await env.MEMORY.list({ prefix: "dream:", limit: 120 });
   const keys = list.keys.map((k) => k.name).sort().reverse();
   const entries = await Promise.all(
@@ -343,6 +347,7 @@ async function handleVault(req: Request, env: Env): Promise<Response> {
   if (!env.ADMIN_TOKEN || !timingSafeEqual(token, env.ADMIN_TOKEN)) {
     return json({ error: "non autorizzato" }, 401, cors);
   }
+  if (!env.MEMORY) return json({ count: 0, entries: [], note: "memoria non ancora attiva (KV)" }, 200, cors);
 
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "200", 10) || 200, 1000);

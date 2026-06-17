@@ -13,13 +13,14 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_MODEL = "gemini-2.5-flash"
 ALLOWED_ORIGINS = "https://officialwhyed.github.io,http://localhost:5173,http://localhost:4173"
 
-# Memoria viva + rate limiting.
-# Crea il namespace e incolla l'id qui sotto:
-#   export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s cloudflare-workers-deploy-token -w)
+# Memoria viva + rate limiting + sogni.
+# DISATTIVATO finché non c'è un token con permesso "Workers KV Storage".
+# Per riattivare: crea il namespace e scommenta il blocco con l'id reale:
+#   export CLOUDFLARE_API_TOKEN=<token con KV edit>
 #   npx --yes wrangler kv namespace create MEMORY
-[[kv_namespaces]]
-binding = "MEMORY"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# [[kv_namespaces]]
+# binding = "MEMORY"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
 # Secret (NON nel file — si mettono da CLI):
 #   printf '%s' 'gsk_...'  | npx --yes wrangler secret put GROQ_API_KEY
