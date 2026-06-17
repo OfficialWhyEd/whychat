@@ -2,18 +2,26 @@ import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react"
 import InkReveal from "./components/InkReveal";
 import OriginButton from "./components/OriginButton";
 import WhyMark from "./components/WhyMark";
+import Composer from "./components/Composer";
+import Sidebar from "./components/Sidebar";
+import ChatMessage, { type Message } from "./components/ChatMessage";
+import Vault from "./components/Vault";
+import Dreams from "./components/Dreams";
+import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
+import {
+  loadChats,
+  saveChats,
+  newChatId,
+  titleFrom,
+  type Chat,
+} from "./lib/chats";
+import { OPENERS } from "./persona/openers";
+import { getName, setName } from "./lib/visitor";
 
 // L'anima 3D è pesante (three.js): la carico solo quando serve, con fallback al sigillo SVG.
 const SoulOrb = lazy(() => import("./components/SoulOrb"));
 const prefersReducedMotion =
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-import Composer from "./components/Composer";
-import ChatMessage, { type Message } from "./components/ChatMessage";
-import Vault from "./components/Vault";
-import Dreams from "./components/Dreams";
-import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
-import { OPENERS } from "./persona/openers";
-import { getName, setName } from "./lib/visitor";
 
 let counter = 0;
 const uid = () => `m${++counter}_${Date.now().toString(36)}`;
@@ -27,20 +35,22 @@ export default function App() {
   }, []);
   if (route === "#vault") return <Vault />;
   if (route === "#dreams") return <Dreams />;
-
   return <Chat />;
 }
 
 function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chats, setChats] = useState<Chat[]>(loadChats);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [deep, setDeep] = useState(false);
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
+  const [sidebar, setSidebar] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const active = chats.find((c) => c.id === activeId) ?? null;
+  const messages = active?.messages ?? [];
   const empty = messages.length === 0;
 
   const scrollToBottom = useCallback(() => {
@@ -56,14 +66,45 @@ function Chat() {
     setError("");
     const userMsg: Message = { id: uid(), role: "user", content: text };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
-    const history: ApiMsg[] = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
-    setMessages((prev) => [...prev, userMsg, aiMsg]);
+
+    const existing = chats.find((c) => c.id === activeId);
+    const baseMessages = existing?.messages ?? [];
+    let id = activeId;
+    let nextChats: Chat[];
+    if (existing) {
+      nextChats = chats.map((c) =>
+        c.id === id ? { ...c, ts: Date.now(), messages: [...c.messages, userMsg, aiMsg] } : c,
+      );
+    } else {
+      id = newChatId();
+      nextChats = [
+        { id, title: titleFrom(text), ts: Date.now(), messages: [userMsg, aiMsg] },
+        ...chats,
+      ];
+    }
+    setChats(nextChats);
+    saveChats(nextChats);
+    setActiveId(id);
     setStreaming(true);
     requestAnimationFrame(scrollToBottom);
 
+    const history: ApiMsg[] = [...baseMessages, userMsg].map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     const patch = (content: string, done = false) =>
-      setMessages((prev) =>
-        prev.map((m) => (m.id === aiMsg.id ? { ...m, content, streaming: !done } : m)),
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === aiMsg.id ? { ...m, content, streaming: !done } : m,
+                ),
+              }
+            : c,
+        ),
       );
 
     try {
@@ -84,15 +125,32 @@ function Chat() {
         );
         patch(acc, true);
       }
+      setChats((prev) => {
+        saveChats(prev);
+        return prev;
+      });
     } catch (e) {
       const msg = (e as Error).name === "AbortError" ? "" : `⚠ ${(e as Error).message}`;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === aiMsg.id
-            ? { ...m, streaming: false, content: m.content || msg || "Qualcosa si è interrotto. Riprova." }
-            : m,
-        ),
-      );
+      setChats((prev) => {
+        const next = prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === aiMsg.id
+                    ? {
+                        ...m,
+                        streaming: false,
+                        content: m.content || msg || "Qualcosa si è interrotto. Riprova.",
+                      }
+                    : m,
+                ),
+              }
+            : c,
+        );
+        saveChats(next);
+        return next;
+      });
       if (msg) setError(msg);
     } finally {
       setStreaming(false);
@@ -101,6 +159,26 @@ function Chat() {
   };
 
   const stop = () => abortRef.current?.abort();
+
+  const newChat = () => {
+    if (streaming) return;
+    setActiveId(null);
+    setSidebar(false);
+    setError("");
+  };
+
+  const selectChat = (cid: string) => {
+    setActiveId(cid);
+    setSidebar(false);
+    setError("");
+  };
+
+  const deleteChat = (cid: string) => {
+    const next = chats.filter((c) => c.id !== cid);
+    setChats(next);
+    saveChats(next);
+    if (cid === activeId) setActiveId(null);
+  };
 
   const askName = () => {
     const n = window.prompt("Come ti chiami? (lo userà WhyChat, e arriva a Edoardo)", name);
@@ -111,73 +189,77 @@ function Chat() {
   };
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex h-full">
+      <div className="aurora" />
       <InkReveal />
 
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-5 py-3">
-        <div className="flex items-center gap-2.5">
-          <WhyMark size={32} active={streaming} />
-          <div className="leading-none">
-            <div className="text-[0.95rem] font-medium tracking-tight text-paper">
-              Why<span className="text-signal">Chat</span>
-            </div>
-            <div className="mono mt-0.5 text-[0.5rem] text-faint">
-              {streaming ? "STA PENSANDO…" : "ANIMA · ONLINE"}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="#dreams"
-            title="Il sogno di WhyChat"
-            className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-ember"
+      <Sidebar
+        chats={chats}
+        activeId={activeId}
+        open={sidebar}
+        streaming={streaming}
+        onSelect={selectChat}
+        onNew={newChat}
+        onDelete={deleteChat}
+        onClose={() => setSidebar(false)}
+      />
+
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        {/* Top bar */}
+        <header className="flex items-center justify-between px-4 py-3">
+          <button
+            onClick={() => setSidebar((s) => !s)}
+            aria-label="Cronologia"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper md:hidden"
           >
-            ☾ SOGNI
-          </a>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+          <div className="hidden md:block" />
           <button
             onClick={askName}
             className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>
-        </div>
-      </header>
+        </header>
 
-      {/* Conversazione */}
-      <main ref={scrollRef} className="scroll-thin relative z-10 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl py-6">
-          {empty ? (
-            <Hero onPick={send} />
-          ) : (
-            <div className="flex flex-col gap-6">
-              {messages.map((m) => (
-                <ChatMessage key={m.id} msg={m} />
-              ))}
-            </div>
-          )}
-          <div ref={bottomRef} className="h-2" />
-        </div>
-      </main>
+        {/* Conversazione */}
+        <main className="scroll-thin relative flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-2xl px-4 py-6">
+            {empty ? (
+              <Hero onPick={send} streaming={streaming} />
+            ) : (
+              <div className="flex flex-col gap-6">
+                {messages.map((m) => (
+                  <ChatMessage key={m.id} msg={m} />
+                ))}
+              </div>
+            )}
+            <div ref={bottomRef} className="h-2" />
+          </div>
+        </main>
 
-      {/* Composer */}
-      <footer className="relative z-10 px-4 pb-4 pt-2">
-        <div className="mx-auto max-w-2xl">
-          <Composer
-            onSend={send}
-            disabled={streaming && !deep}
-            deep={deep}
-            onToggleDeep={() => setDeep((d) => !d)}
-            onStop={stop}
-            streaming={streaming && !deep}
-          />
-          <p className="mt-2 text-center text-[0.6rem] text-faint">
-            WhyChat è l'anima digitale di WhyEd · le conversazioni possono essere conservate per
-            farlo crescere — non scrivere dati sensibili.
-            {deep && <span className="text-ember"> · pensiero profondo attivo</span>}
-          </p>
-        </div>
-      </footer>
+        {/* Composer */}
+        <footer className="px-4 pb-4 pt-2">
+          <div className="mx-auto max-w-2xl">
+            <Composer
+              onSend={send}
+              disabled={streaming && !deep}
+              deep={deep}
+              onToggleDeep={() => setDeep((d) => !d)}
+              onStop={stop}
+              streaming={streaming && !deep}
+            />
+            <p className="mt-2 text-center text-[0.6rem] text-faint">
+              WhyChat è l'anima digitale di WhyEd · le conversazioni possono essere conservate per
+              farlo crescere — non scrivere dati sensibili.
+              {deep && <span className="text-ember"> · pensiero profondo attivo</span>}
+            </p>
+          </div>
+        </footer>
+      </div>
 
       {error && (
         <div className="pointer-events-none fixed bottom-24 left-1/2 z-20 -translate-x-1/2 text-xs text-signal-soft">
@@ -188,19 +270,19 @@ function Chat() {
   );
 }
 
-function Hero({ onPick }: { onPick: (t: string) => void }) {
+function Hero({ onPick, streaming }: { onPick: (t: string) => void; streaming: boolean }) {
   return (
-    <div className="rise flex flex-col items-center px-5 pt-[6vh] text-center">
+    <div className="rise flex flex-col items-center pt-[5vh] text-center">
       {prefersReducedMotion ? (
         <WhyMark size={72} />
       ) : (
         <Suspense fallback={<WhyMark size={72} />}>
-          <div className="-my-4">
-            <SoulOrb size={200} />
+          <div className="-my-3">
+            <SoulOrb size={188} active={streaming} />
           </div>
         </Suspense>
       )}
-      <h1 className="mt-5 text-[2.1rem] leading-[1.05] tracking-tight text-paper">
+      <h1 className="mt-4 text-[2.1rem] leading-[1.05] tracking-tight text-paper">
         Sono <span className="text-signal glow-signal">WhyChat</span>.
       </h1>
       <p className="mt-3 max-w-md text-[0.98rem] leading-relaxed text-dim">
