@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
-import InkReveal from "./components/InkReveal";
+import { useEffect, useRef, useState, useCallback } from "react";
+import FluidBackground from "./components/FluidBackground";
+import ParticleText from "./components/ParticleText";
 import OriginButton from "./components/OriginButton";
-import WhyMark from "./components/WhyMark";
 import Composer from "./components/Composer";
 import Sidebar from "./components/Sidebar";
 import ChatMessage, { type Message } from "./components/ChatMessage";
@@ -17,11 +17,6 @@ import {
 } from "./lib/chats";
 import { OPENERS } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
-
-// L'anima 3D è pesante (three.js): la carico solo quando serve, con fallback al sigillo SVG.
-const SoulOrb = lazy(() => import("./components/SoulOrb"));
-const prefersReducedMotion =
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let counter = 0;
 const uid = () => `m${++counter}_${Date.now().toString(36)}`;
@@ -190,8 +185,7 @@ function Chat() {
 
   return (
     <div className="relative flex h-full">
-      <div className="aurora" />
-      <InkReveal />
+      <FluidBackground />
 
       <Sidebar
         chats={chats}
@@ -229,7 +223,7 @@ function Chat() {
         <main className="scroll-thin relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-4 py-6">
             {empty ? (
-              <Hero onPick={send} streaming={streaming} />
+              <Hero onPick={send} />
             ) : (
               <div className="flex flex-col gap-6">
                 {messages.map((m) => (
@@ -270,22 +264,11 @@ function Chat() {
   );
 }
 
-function Hero({ onPick, streaming }: { onPick: (t: string) => void; streaming: boolean }) {
+function Hero({ onPick }: { onPick: (t: string) => void }) {
   return (
-    <div className="rise flex flex-col items-center pt-[5vh] text-center">
-      {prefersReducedMotion ? (
-        <WhyMark size={72} />
-      ) : (
-        <Suspense fallback={<WhyMark size={72} />}>
-          <div className="-my-3">
-            <SoulOrb size={188} active={streaming} />
-          </div>
-        </Suspense>
-      )}
-      <h1 className="mt-4 text-[2.1rem] leading-[1.05] tracking-tight text-paper">
-        Sono <span className="text-signal glow-signal">WhyChat</span>.
-      </h1>
-      <p className="mt-3 max-w-md text-[0.98rem] leading-relaxed text-dim">
+    <div className="rise flex flex-col items-center pt-[7vh] text-center">
+      <ParticleText />
+      <p className="mt-1 max-w-md text-[0.98rem] leading-relaxed text-dim">
         L'anima digitale di WhyEd — la sua coscienza, il suo modo di pensare e creare.
         <span className="serif-i text-faint"> Parlami.</span>
       </p>
