@@ -23,6 +23,19 @@ export interface Env {
   GEMINI_MODEL?: string;
 }
 
+// ── Modalità della conversazione (cambiano come pensa WhyChat) ───────────────
+const MODE_HINTS: Record<string, string> = {
+  canvas: `\n\n[MODALITÀ CANVAS] Quando ha senso, rispondi COSTRUENDO: emetti uno o più artifact \`\`\`whyart (HTML autosufficiente) — schizzi, diagrammi, mini-interfacce, visualizzazioni, mini-giochi. Prima una riga di testo, poi il canvas. Fai vedere, non solo dire.`,
+  learn: `\n\n[MODALITÀ APPRENDIMENTO] Insegna come faresti a qualcuno che vuole capire davvero: parti dall'intuizione, poi la struttura, poi un esempio concreto. Un passo alla volta, niente muri di testo. Fai una domanda di verifica alla fine. Tono diretto e caldo, mai accademico.`,
+  chat: "",
+};
+
+// ── Modelli selezionabili (nomi-anima → modelli Groq reali, entrambi in streaming) ──
+const MODEL_MAP: Record<string, string> = {
+  "terry-4.2": "llama-3.1-8b-instant", // veloce, reattivo
+  "whychat-5.5": "llama-3.3-70b-versatile", // più capace, ragiona meglio
+};
+
 // ── Config ───────────────────────────────────────────────────────────────────
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
@@ -146,7 +159,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     // origine non in lista → blocco (difesa anti-hotlinking della tua quota)
   }
 
-  let body: { messages?: unknown; visitorId?: unknown; name?: unknown };
+  let body: { messages?: unknown; visitorId?: unknown; name?: unknown; mode?: unknown; model?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -157,16 +170,21 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   if (!messages) return json({ error: "messaggi non validi" }, 400, cors);
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
   const name = String(body.name ?? "").slice(0, 80);
+  const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
+  const groqModel = MODEL_MAP[String(body.model ?? "")] || env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
   const payload = {
-    model: env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
+    model: groqModel,
     stream: true,
     temperature: 0.85,
     max_tokens: 2048,
     messages: [
-      { role: "system", content: SOUL + (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") },
+      {
+        role: "system",
+        content: SOUL + (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") + modeHint,
+      },
       ...messages,
     ],
   };

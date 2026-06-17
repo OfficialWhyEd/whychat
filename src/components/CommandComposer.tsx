@@ -1,0 +1,188 @@
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import OriginButton from "./OriginButton";
+
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet";
+
+interface ModeDef {
+  id: Mode;
+  label: string;
+  desc: string;
+  tag?: string;
+  icon: React.ReactNode;
+}
+
+const I = (d: string, extra?: React.ReactNode) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+    {extra}
+  </svg>
+);
+
+export const MODES: ModeDef[] = [
+  { id: "chat", label: "Chat", desc: "Conversazione, come sempre", icon: I("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z") },
+  { id: "canvas", label: "Canvas", desc: "Disegna l'idea, fa cose", icon: I("M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z M2 2l7.586 7.586", <circle cx="11" cy="11" r="2" />) },
+  { id: "deep", label: "Deep thinking", desc: "Ragiona a fondo (Gemini)", tag: "∞", icon: I("M9.5 2a4.5 4.5 0 0 0-4.5 4.5c-.9.5-1.5 1.5-1.5 2.7 0 .9.4 1.8 1 2.4-.3.5-.5 1.1-.5 1.9a3 3 0 0 0 3 3 3 3 0 0 0 3 3V2z M14.5 2a4.5 4.5 0 0 1 4.5 4.5c.9.5 1.5 1.5 1.5 2.7 0 .9-.4 1.8-1 2.4.3.5.5 1.1.5 1.9a3 3 0 0 1-3 3 3 3 0 0 1-3 3V2z") },
+  { id: "learn", label: "Apprendimento", desc: "Impara un passo alla volta", icon: I("M22 10L12 5 2 10l10 5 10-5z M6 12v5c0 1 2.5 2.5 6 2.5s6-1.5 6-2.5v-5") },
+  { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: I("M12 3v18M3 12h18", <circle cx="12" cy="12" r="9" />) },
+];
+
+const container = {
+  hidden: { opacity: 0, height: 0 },
+  show: { opacity: 1, height: "auto", transition: { height: { duration: 0.32 }, staggerChildren: 0.05 } },
+  exit: { opacity: 0, height: 0, transition: { height: { duration: 0.24 }, opacity: { duration: 0.16 } } },
+};
+const itemV = {
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.26 } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.16 } },
+};
+
+interface Props {
+  onSend: (text: string) => void;
+  disabled: boolean;
+  mode: Mode;
+  onMode: (m: Mode) => void;
+  onStop?: () => void;
+  streaming: boolean;
+}
+
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming }: Props) {
+  const [value, setValue] = useState("");
+  const [menu, setMenu] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }, [value]);
+
+  const submit = () => {
+    const t = value.trim();
+    if (!t || disabled) return;
+    onSend(t);
+    setValue("");
+  };
+
+  const pick = (m: Mode) => {
+    onMode(m);
+    setMenu(false);
+    ref.current?.focus();
+  };
+
+  return (
+    <div className="relative">
+      {/* Palette modalità */}
+      <AnimatePresence>
+        {menu && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+            <motion.div
+              variants={container}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="glass absolute bottom-[calc(100%+8px)] left-0 z-20 w-full overflow-hidden rounded-2xl"
+            >
+              <div className="mono px-4 pb-1 pt-3 text-[0.5rem] text-faint">MODALITÀ</div>
+              <ul className="px-1.5 pb-2">
+                {MODES.map((m) => {
+                  const active = m.id === mode;
+                  return (
+                    <motion.li key={m.id} variants={itemV} layout>
+                      <button
+                        onClick={() => pick(m.id)}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                          active ? "bg-[rgba(201,75,37,0.16)]" : "hover:bg-[rgba(242,239,233,0.05)]"
+                        }`}
+                      >
+                        <span className={active ? "text-signal" : "text-dim"}>{m.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className={`text-[0.86rem] ${active ? "text-paper" : "text-dim"}`}>{m.label}</span>
+                            {m.tag && (
+                              <span className="mono rounded-full bg-[rgba(240,163,106,0.16)] px-1.5 py-0.5 text-[0.46rem] text-ember">
+                                {m.tag}
+                              </span>
+                            )}
+                          </span>
+                          <span className="block truncate text-[0.66rem] text-faint">{m.desc}</span>
+                        </span>
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-signal" />}
+                      </button>
+                    </motion.li>
+                  );
+                })}
+              </ul>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Barra */}
+      <div className="glass glass-sheen rounded-[26px] p-2 pl-2">
+        <div className="flex items-end gap-2">
+          {/* chip modalità → apre la palette */}
+          <button
+            onClick={() => setMenu((s) => !s)}
+            title="Scegli modalità"
+            className={`mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-2 text-[0.62rem] transition ${
+              mode === "chat"
+                ? "border-[var(--color-line2)] text-faint hover:text-dim"
+                : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember"
+            }`}
+          >
+            <span className={mode === "chat" ? "text-dim" : "text-ember"}>{current.icon}</span>
+            {mode !== "chat" && <span className="mono">{current.label}</span>}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" className="opacity-60">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+          </button>
+
+          <textarea
+            ref={ref}
+            value={value}
+            rows={1}
+            disabled={disabled}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+              if (e.key === "Escape") setMenu(false);
+            }}
+            placeholder={mode === "sheet" ? "Scrivi un pensiero sul foglio…" : "Scrivi a WhyChat…"}
+            className="scroll-thin max-h-[200px] flex-1 resize-none bg-transparent py-2.5 text-[0.98rem] leading-relaxed text-paper placeholder:text-faint focus:outline-none"
+          />
+
+          {streaming ? (
+            <button
+              onClick={onStop}
+              title="Ferma"
+              className="mb-0.5 grid h-10 w-10 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
+            >
+              <span className="block h-3 w-3 rounded-[3px] bg-paper" />
+            </button>
+          ) : (
+            <OriginButton
+              onClick={submit}
+              disabled={disabled || !value.trim()}
+              title="Invia"
+              fill="#a73c1c"
+              className="mb-0.5 grid h-10 w-10 place-items-center rounded-full transition disabled:opacity-35"
+            >
+              <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)", zIndex: -1 }} />
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#0a0908" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </OriginButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

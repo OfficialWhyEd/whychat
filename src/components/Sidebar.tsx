@@ -1,5 +1,9 @@
+import { lazy, Suspense } from "react";
 import { relativeTime, type Chat } from "../lib/chats";
 import WhyMark from "./WhyMark";
+
+// L'orb è l'anima-logo di WhyChat. three.js → chunk separato, fallback al sigillo.
+const SoulOrb = lazy(() => import("./SoulOrb"));
 
 interface Props {
   chats: Chat[];
@@ -38,16 +42,15 @@ export default function Sidebar({
         }`}
         style={{ willChange: "transform" }}
       >
-        {/* brand */}
-        <div className="flex items-center gap-2.5 px-4 pb-3 pt-4">
-          <WhyMark size={28} active={streaming} />
-          <div className="leading-none">
-            <div className="text-[0.9rem] font-medium tracking-tight text-paper">
-              Why<span className="text-signal">Chat</span>
+        {/* brand: l'orb è il logo */}
+        <div className="flex items-center gap-1 px-3 pb-3 pt-3">
+          <Suspense fallback={<WhyMark size={40} active={streaming} />}>
+            <div className="-m-1">
+              <SoulOrb size={48} active={streaming} />
             </div>
-            <div className="mono mt-0.5 text-[0.46rem] text-faint">
-              {streaming ? "STA PENSANDO…" : "ANIMA · ONLINE"}
-            </div>
+          </Suspense>
+          <div className="text-[1.02rem] font-medium tracking-tight text-paper">
+            Why<span className="text-signal">Chat</span>
           </div>
         </div>
 

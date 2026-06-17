@@ -18,11 +18,13 @@ export async function streamChat(
   messages: ChatMessage[],
   onToken: (delta: string) => void,
   signal?: AbortSignal,
+  mode = "chat",
+  model = "whychat-5.5",
 ): Promise<void> {
   const res = await fetch(`${WORKER_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, visitorId: visitorId(), name: getName() }),
+    body: JSON.stringify({ messages, visitorId: visitorId(), name: getName(), mode, model }),
     signal,
   });
 

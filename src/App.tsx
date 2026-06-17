@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import FluidBackground from "./components/FluidBackground";
-import ParticleText from "./components/ParticleText";
+import SoulParticles from "./components/SoulParticles";
+import CommandComposer, { type Mode } from "./components/CommandComposer";
+import BlankSheet from "./components/BlankSheet";
+import ModelSelector, { modelName } from "./components/ModelSelector";
 import OriginButton from "./components/OriginButton";
-import Composer from "./components/Composer";
 import Sidebar from "./components/Sidebar";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
 import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
-import {
-  loadChats,
-  saveChats,
-  newChatId,
-  titleFrom,
-  type Chat,
-} from "./lib/chats";
+import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { OPENERS } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
 
@@ -37,7 +32,8 @@ function Chat() {
   const [chats, setChats] = useState<Chat[]>(loadChats);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
-  const [deep, setDeep] = useState(false);
+  const [mode, setMode] = useState<Mode>("chat");
+  const [model, setModel] = useState("whychat-5.5");
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
   const [sidebar, setSidebar] = useState(false);
@@ -47,6 +43,7 @@ function Chat() {
   const active = chats.find((c) => c.id === activeId) ?? null;
   const messages = active?.messages ?? [];
   const empty = messages.length === 0;
+  const sheet = mode === "sheet";
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -72,10 +69,7 @@ function Chat() {
       );
     } else {
       id = newChatId();
-      nextChats = [
-        { id, title: titleFrom(text), ts: Date.now(), messages: [userMsg, aiMsg] },
-        ...chats,
-      ];
+      nextChats = [{ id, title: titleFrom(text), ts: Date.now(), messages: [userMsg, aiMsg] }, ...chats];
     }
     setChats(nextChats);
     saveChats(nextChats);
@@ -83,27 +77,19 @@ function Chat() {
     setStreaming(true);
     requestAnimationFrame(scrollToBottom);
 
-    const history: ApiMsg[] = [...baseMessages, userMsg].map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const history: ApiMsg[] = [...baseMessages, userMsg].map((m) => ({ role: m.role, content: m.content }));
 
     const patch = (content: string, done = false) =>
       setChats((prev) =>
         prev.map((c) =>
           c.id === id
-            ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === aiMsg.id ? { ...m, content, streaming: !done } : m,
-                ),
-              }
+            ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, content, streaming: !done } : m)) }
             : c,
         ),
       );
 
     try {
-      if (deep) {
+      if (mode === "deep") {
         const out = await deepThink(history);
         patch(out, true);
       } else {
@@ -117,6 +103,8 @@ function Chat() {
             patch(acc);
           },
           ctrl.signal,
+          mode,
+          model,
         );
         patch(acc, true);
       }
@@ -133,11 +121,7 @@ function Chat() {
                 ...c,
                 messages: c.messages.map((m) =>
                   m.id === aiMsg.id
-                    ? {
-                        ...m,
-                        streaming: false,
-                        content: m.content || msg || "Qualcosa si è interrotto. Riprova.",
-                      }
+                    ? { ...m, streaming: false, content: m.content || msg || "Qualcosa si è interrotto. Riprova." }
                     : m,
                 ),
               }
@@ -161,20 +145,17 @@ function Chat() {
     setSidebar(false);
     setError("");
   };
-
   const selectChat = (cid: string) => {
     setActiveId(cid);
     setSidebar(false);
     setError("");
   };
-
   const deleteChat = (cid: string) => {
     const next = chats.filter((c) => c.id !== cid);
     setChats(next);
     saveChats(next);
     if (cid === activeId) setActiveId(null);
   };
-
   const askName = () => {
     const n = window.prompt("Come ti chiami? (lo userà WhyChat, e arriva a Edoardo)", name);
     if (n !== null) {
@@ -183,9 +164,11 @@ function Chat() {
     }
   };
 
+  const busy = streaming && mode !== "deep";
+
   return (
     <div className="relative flex h-full">
-      <FluidBackground />
+      <SoulParticles formText={empty && !sheet} modelName={modelName(model)} />
 
       <Sidebar
         chats={chats}
@@ -200,56 +183,63 @@ function Chat() {
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex items-center justify-between px-4 py-3">
+        <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
             onClick={() => setSidebar((s) => !s)}
             aria-label="Cronologia"
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper md:hidden"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper md:hidden"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          <div className="hidden md:block" />
+          <ModelSelector model={model} onModel={setModel} />
           <button
             onClick={askName}
-            className="mono rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+            className="mono ml-auto rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>
         </header>
 
-        {/* Conversazione */}
-        <main className="scroll-thin relative flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-2xl px-4 py-6">
-            {empty ? (
-              <Hero onPick={send} />
-            ) : (
-              <div className="flex flex-col gap-6">
-                {messages.map((m) => (
-                  <ChatMessage key={m.id} msg={m} />
-                ))}
-              </div>
-            )}
-            <div ref={bottomRef} className="h-2" />
-          </div>
-        </main>
+        {/* Area centrale */}
+        {sheet ? (
+          <main className="min-h-0 flex-1 px-4 pb-3">
+            <div className="mx-auto h-full max-w-4xl">
+              <BlankSheet />
+            </div>
+          </main>
+        ) : (
+          <main className="scroll-thin relative flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-2xl px-4 py-6">
+              {empty ? (
+                <Hero onPick={send} />
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {messages.map((m) => (
+                    <ChatMessage key={m.id} msg={m} />
+                  ))}
+                </div>
+              )}
+              <div ref={bottomRef} className="h-2" />
+            </div>
+          </main>
+        )}
 
         {/* Composer */}
         <footer className="px-4 pb-4 pt-2">
           <div className="mx-auto max-w-2xl">
-            <Composer
+            <CommandComposer
               onSend={send}
-              disabled={streaming && !deep}
-              deep={deep}
-              onToggleDeep={() => setDeep((d) => !d)}
+              disabled={busy}
+              mode={mode}
+              onMode={setMode}
               onStop={stop}
-              streaming={streaming && !deep}
+              streaming={busy}
             />
             <p className="mt-2 text-center text-[0.6rem] text-faint">
-              WhyChat è l'anima digitale di WhyEd · le conversazioni possono essere conservate per
-              farlo crescere — non scrivere dati sensibili.
-              {deep && <span className="text-ember"> · pensiero profondo attivo</span>}
+              WhyChat · {modelName(model)} · le conversazioni possono essere conservate per farlo
+              crescere — non scrivere dati sensibili.
             </p>
           </div>
         </footer>
@@ -266,14 +256,15 @@ function Chat() {
 
 function Hero({ onPick }: { onPick: (t: string) => void }) {
   return (
-    <div className="rise flex flex-col items-center pt-[7vh] text-center">
-      <ParticleText />
-      <p className="mt-1 max-w-md text-[0.98rem] leading-relaxed text-dim">
+    <div className="rise flex flex-col items-center text-center">
+      {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
+      <div style={{ height: "clamp(180px, 30vh, 280px)" }} />
+      <p className="max-w-md text-[0.98rem] leading-relaxed text-dim">
         L'anima digitale di WhyEd — la sua coscienza, il suo modo di pensare e creare.
         <span className="serif-i text-faint"> Parlami.</span>
       </p>
 
-      <div className="mt-9 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
         {OPENERS.map((o) => (
           <OriginButton
             key={o}

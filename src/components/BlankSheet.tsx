@@ -1,0 +1,192 @@
+import { useEffect, useRef, useState } from "react";
+
+/**
+ * BlankSheet — la modalità OnlyType (beta): un foglio bianco dove fai quello che
+ * vuoi. Disegni con penna, scrivi testo, cancelli — perfetto con mouse, trackpad
+ * e dito (Pointer Events + touch-action none). La barra in basso è lo strumento.
+ */
+
+type Tool = "pen" | "text" | "eraser";
+const COLORS = ["#f2efe9", "#c94b25", "#f0a36a", "#8a8378"];
+
+interface TextNode {
+  id: number;
+  x: number;
+  y: number;
+  value: string;
+  color: string;
+}
+
+export default function BlankSheet() {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const last = useRef({ x: 0, y: 0 });
+  const [tool, setTool] = useState<Tool>("pen");
+  const [color, setColor] = useState(COLORS[1]);
+  const [size, setSize] = useState(3);
+  const [texts, setTexts] = useState<TextNode[]>([]);
+  const nextId = useRef(1);
+
+  // dimensiona il canvas al contenitore (una volta + su resize, preservando il disegno)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const ctx = canvas.getContext("2d")!;
+    const fit = () => {
+      const snap = canvas.width ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = wrap.clientWidth * dpr;
+      canvas.height = wrap.clientHeight * dpr;
+      canvas.style.width = wrap.clientWidth + "px";
+      canvas.style.height = wrap.clientHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (snap) ctx.putImageData(snap, 0, 0);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
+  const pos = (e: React.PointerEvent) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const onDown = (e: React.PointerEvent) => {
+    if (tool === "text") {
+      const { x, y } = pos(e);
+      const id = nextId.current++;
+      setTexts((t) => [...t, { id, x, y, value: "", color }]);
+      return;
+    }
+    drawing.current = true;
+    last.current = pos(e);
+    (e.target as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onMove = (e: React.PointerEvent) => {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = pos(e);
+    ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = tool === "eraser" ? size * 6 : size;
+    ctx.beginPath();
+    ctx.moveTo(last.current.x, last.current.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    last.current = { x, y };
+  };
+
+  const onUp = () => {
+    drawing.current = false;
+  };
+
+  const clearAll = () => {
+    const c = canvasRef.current!;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    setTexts([]);
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div ref={wrapRef} className="glass relative flex-1 overflow-hidden rounded-3xl">
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerLeave={onUp}
+          className="absolute inset-0"
+          style={{ touchAction: "none", cursor: tool === "text" ? "text" : "crosshair" }}
+        />
+        {texts.map((t) => (
+          <textarea
+            key={t.id}
+            autoFocus
+            value={t.value}
+            onChange={(e) =>
+              setTexts((arr) => arr.map((n) => (n.id === t.id ? { ...n, value: e.target.value } : n)))
+            }
+            onBlur={() => {
+              if (!t.value.trim()) setTexts((arr) => arr.filter((n) => n.id !== t.id));
+            }}
+            placeholder="scrivi…"
+            className="absolute resize-none overflow-hidden bg-transparent text-[1.5rem] leading-tight outline-none placeholder:text-faint/40"
+            style={{
+              left: t.x,
+              top: t.y - 20,
+              color: t.color,
+              minWidth: 60,
+              width: Math.max(60, t.value.length * 14),
+              fontFamily: "var(--font-sans)",
+            }}
+          />
+        ))}
+
+        {texts.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center">
+            <p className="mono text-[0.6rem] text-faint">FOGLIO BIANCO · DISEGNA O SCRIVI · MOUSE E DITO</p>
+          </div>
+        )}
+      </div>
+
+      {/* barra strumenti */}
+      <div className="mt-3 flex items-center justify-center gap-2">
+        <div className="glass flex items-center gap-1 rounded-full p-1.5">
+          {([
+            ["pen", "M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"],
+            ["text", "M4 7V5h16v2 M9 5v14 M7 19h4"],
+            ["eraser", "M20 20H7L3 16a2 2 0 0 1 0-3l8-8a2 2 0 0 1 3 0l6 6a2 2 0 0 1 0 3l-6 6"],
+          ] as [Tool, string][]).map(([t, d]) => (
+            <button
+              key={t}
+              onClick={() => setTool(t)}
+              title={t}
+              className={`grid h-9 w-9 place-items-center rounded-full transition ${
+                tool === t ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-dim"
+              }`}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d={d} />
+              </svg>
+            </button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              title="colore"
+              className={`h-6 w-6 rounded-full transition ${color === c ? "ring-2 ring-offset-2 ring-offset-[#100d0b] ring-paper/60" : ""}`}
+              style={{ background: c }}
+            />
+          ))}
+          <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
+          <input
+            type="range"
+            min={1}
+            max={12}
+            value={size}
+            onChange={(e) => setSize(+e.target.value)}
+            className="w-16 accent-[#c94b25]"
+            title="spessore"
+          />
+          <button
+            onClick={clearAll}
+            title="Pulisci"
+            className="ml-1 grid h-9 w-9 place-items-center rounded-full text-faint transition hover:text-signal-soft"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
