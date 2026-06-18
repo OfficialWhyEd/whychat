@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
+import InkReveal from "./components/InkReveal";
 import CommandComposer, { type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
@@ -169,6 +170,7 @@ function Chat() {
   return (
     <div className="relative flex h-full">
       <SoulParticles formText={empty && !sheet} modelName={modelName(model)} />
+      <InkReveal />
 
       <Sidebar
         chats={chats}

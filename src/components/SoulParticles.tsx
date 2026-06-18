@@ -61,7 +61,15 @@ interface P {
 }
 
 const WORDS = ["SONO WHYCHAT", "L'ANIMA DI WHYED", "PARLAMI", "PENSA CON ME"];
-const COUNT = 1500;
+// Conteggio adattivo: meno particelle su mobile/CPU deboli, pieno su desktop.
+const COUNT = (() => {
+  if (typeof window === "undefined") return 1100;
+  const w = window.innerWidth;
+  const cores = (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency ?? 4;
+  if (w < 640 || cores <= 4) return 720;
+  if (w < 1024) return 1100;
+  return 1500;
+})();
 
 export default function SoulParticles({
   formText = true,
@@ -276,10 +284,22 @@ export default function SoulParticles({
       raf = requestAnimationFrame(tick);
     }
 
+    // pausa quando la tab non è visibile: niente CPU/batteria sprecata
+    const onVis = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+      } else if (!reduce) {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+
     window.addEventListener("resize", resize);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 

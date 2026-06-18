@@ -58,36 +58,6 @@ body {
   background: transparent;
 }
 
-/* ─── Aurora: sfondo vivo che riempie il vuoto ─────────────────────────── */
-.aurora {
-  position: fixed;
-  inset: -20%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(38% 44% at 22% 28%, rgba(201, 75, 37, 0.16), transparent 70%),
-    radial-gradient(34% 40% at 80% 22%, rgba(240, 163, 106, 0.1), transparent 72%),
-    radial-gradient(46% 50% at 64% 82%, rgba(201, 75, 37, 0.12), transparent 70%);
-  filter: blur(28px) saturate(120%);
-  animation: aurora-drift 26s ease-in-out infinite alternate;
-}
-@keyframes aurora-drift {
-  0% {
-    transform: translate3d(-2%, -1%, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(2%, 1.5%, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-1%, 2%, 0) scale(1.02);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .aurora {
-    animation: none;
-  }
-}
-
 /* ─── Liquid glass ─────────────────────────────────────────────────────── */
 .glass {
   background: linear-gradient(

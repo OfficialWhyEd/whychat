@@ -1,9 +1,7 @@
-import { lazy, Suspense } from "react";
 import { relativeTime, type Chat } from "../lib/chats";
-import WhyMark from "./WhyMark";
+import SoulOrb from "./SoulOrb";
 
-// L'orb è l'anima-logo di WhyChat. three.js → chunk separato, fallback al sigillo.
-const SoulOrb = lazy(() => import("./SoulOrb"));
+// L'orb è l'anima-logo di WhyChat. Ora canvas 2D puro: leggero, import diretto.
 
 interface Props {
   chats: Chat[];
@@ -44,11 +42,9 @@ export default function Sidebar({
       >
         {/* brand: l'orb è il logo */}
         <div className="flex items-center gap-1 px-3 pb-3 pt-3">
-          <Suspense fallback={<WhyMark size={40} active={streaming} />}>
-            <div className="-m-1">
-              <SoulOrb size={48} active={streaming} />
-            </div>
-          </Suspense>
+          <div className="-m-1">
+            <SoulOrb size={48} active={streaming} />
+          </div>
           <div className="text-[1.02rem] font-medium tracking-tight text-paper">
             Why<span className="text-signal">Chat</span>
           </div>

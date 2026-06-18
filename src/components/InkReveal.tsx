@@ -86,10 +86,20 @@ export default function InkReveal() {
     };
     raf = requestAnimationFrame(draw);
 
+    const onVis = () => {
+      if (document.hidden) cancelAnimationFrame(raf);
+      else {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 
