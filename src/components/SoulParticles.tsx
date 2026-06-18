@@ -61,14 +61,14 @@ interface P {
 }
 
 const WORDS = ["SONO WHYCHAT", "L'ANIMA DI WHYED", "PARLAMI", "PENSA CON ME"];
-// Conteggio adattivo: meno particelle su mobile/CPU deboli, pieno su desktop.
+// Densità alta: il testo dev'essere pieno e leggibile. Solo mobile leggermente
+// ridotto per il fill-rate (schermi piccoli), desktop ricco.
 const COUNT = (() => {
-  if (typeof window === "undefined") return 1100;
+  if (typeof window === "undefined") return 1900;
   const w = window.innerWidth;
-  const cores = (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency ?? 4;
-  if (w < 640 || cores <= 4) return 720;
-  if (w < 1024) return 1100;
-  return 1500;
+  if (w < 640) return 1300;
+  if (w < 1024) return 1800;
+  return 2200;
 })();
 
 export default function SoulParticles({
@@ -143,7 +143,7 @@ export default function SoulParticles({
       o.fillText(word, ow / 2, oh / 2);
       const data = o.getImageData(0, 0, ow, oh).data;
       const pts: { x: number; y: number }[] = [];
-      const step = 5;
+      const step = 4; // più fitto = lettere più nitide
       for (let y = 0; y < oh; y += step) {
         for (let x = 0; x < ow; x += step) {
           if (data[(y * ow + x) * 4 + 3] > 128) {
@@ -166,7 +166,7 @@ export default function SoulParticles({
     const assignWord = () => {
       const list = wordsRef.current;
       const pts = sampleWord(list[wordIndex % list.length]);
-      const n = Math.min(pts.length, Math.floor(COUNT * 0.85));
+      const n = Math.min(pts.length, Math.floor(COUNT * 0.92));
       for (let i = 0; i < particles.length; i++) {
         if (i < n) {
           particles[i].forming = true;
@@ -225,13 +225,13 @@ export default function SoulParticles({
 
       for (const p of particles) {
         if (p.forming) {
-          // arrive verso il target (forma la lettera)
+          // molla critica verso il target: la lettera si compone fluida e si
+          // assesta senza scatti. hue dà un piccolo stagger → assemblaggio vivo.
           const dx = p.tx - p.x,
             dy = p.ty - p.y;
-          const d = Math.hypot(dx, dy) || 1;
-          const speed = Math.min(d, 8);
-          p.vx += ((dx / d) * speed - p.vx) * 0.18;
-          p.vy += ((dy / d) * speed - p.vy) * 0.18;
+          const k = 0.016 + p.hue * 0.012; // rigidità per-particella
+          p.vx = (p.vx + dx * k) * 0.8; // smorzamento
+          p.vy = (p.vy + dy * k) * 0.8;
         } else {
           // corrente Perlin
           p.life += 1;
@@ -255,10 +255,11 @@ export default function SoulParticles({
         const r = Math.round(201 + (240 - 201) * p.hue);
         const g = Math.round(75 + (163 - 75) * p.hue);
         const b = Math.round(37 + (106 - 37) * p.hue);
-        // le particelle che formano la parola brillano di più
-        const op = p.forming ? 0.95 : Math.sin((p.life / p.maxLife) * Math.PI) * 0.42;
+        // le particelle che formano la parola brillano di più (mix-blend screen
+        // somma il colore dove sono dense → la scritta si accende viva)
+        const op = p.forming ? 1 : Math.sin((p.life / p.maxLife) * Math.PI) * 0.4;
         ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-        const s = p.forming ? p.size + 0.6 : p.size;
+        const s = p.forming ? p.size * 0.7 + 1.1 : p.size; // testo nitido e costante
         ctx.fillRect(p.x, p.y, s, s);
       }
       raf = requestAnimationFrame(tick);
@@ -308,7 +309,7 @@ export default function SoulParticles({
       ref={canvasRef}
       aria-hidden
       className="pointer-events-none fixed inset-0"
-      style={{ width: "100%", height: "100%", zIndex: 0 }}
+      style={{ width: "100%", height: "100%", zIndex: 0, mixBlendMode: "screen" }}
     />
   );
 }
