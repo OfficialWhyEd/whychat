@@ -260,21 +260,38 @@ function Hero({ onPick }: { onPick: (t: string) => void }) {
   return (
     <div className="rise flex flex-col items-center text-center">
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
-      <div style={{ height: "clamp(180px, 30vh, 280px)" }} />
-      <p className="max-w-md text-[0.98rem] leading-relaxed text-dim">
-        L'anima digitale di WhyEd — la sua coscienza, il suo modo di pensare e creare.
-        <span className="serif-i text-faint"> Parlami.</span>
+      <div style={{ height: "clamp(170px, 28vh, 260px)" }} />
+
+      <p className="max-w-sm text-balance text-[1.05rem] font-light leading-relaxed text-dim">
+        L'anima digitale di WhyEd: la sua coscienza, il suo modo di pensare e creare.
+        <span className="serif-i text-paper"> Parlami.</span>
       </p>
 
-      <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-        {OPENERS.map((o) => (
+      <div className="mt-3 h-px w-10 bg-gradient-to-r from-transparent via-signal/50 to-transparent" />
+
+      {/* prompt d'ingresso — righe editoriali, non pillole-card */}
+      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {OPENERS.map((o, i) => (
           <OriginButton
             key={o}
             onClick={() => onPick(o)}
-            fill="rgba(201,75,37,0.22)"
-            className="glass glass-sheen rounded-2xl px-4 py-3 text-[0.85rem] text-dim transition hover:text-paper"
+            fill="rgba(201,75,37,0.18)"
+            className="group rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] px-4 py-3 text-[0.85rem] text-dim transition-colors duration-200 hover:border-signal/40 hover:text-paper"
           >
-            <span className="w-full text-left">{o}</span>
+            <span className="mono shrink-0 text-[0.5rem] text-faint transition-colors group-hover:text-signal">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span className="min-w-0 flex-1 text-left">{o}</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+              className="shrink-0 -translate-x-1.5 text-signal opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100"
+            >
+              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </OriginButton>
         ))}
       </div>
