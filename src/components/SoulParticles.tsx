@@ -135,9 +135,10 @@ export default function SoulParticles({
       off.width = ow;
       off.height = oh;
       const o = off.getContext("2d")!;
-      const fs = Math.min(104, (ow / Math.max(word.length, 7)) * 1.6);
+      const fs = Math.min(108, (ow / Math.max(word.length, 7)) * 1.7);
       o.fillStyle = "#fff";
-      o.font = `700 ${fs}px Outfit, system-ui, sans-serif`;
+      // display espressivo: stesso carattere del wordmark
+      o.font = `900 ${fs}px "Fraunces", "DM Serif Display", serif`;
       o.textAlign = "center";
       o.textBaseline = "middle";
       o.fillText(word, ow / 2, oh / 2);
@@ -190,6 +191,16 @@ export default function SoulParticles({
     };
 
     if (formText) assignWord();
+
+    // Fraunces si carica async: appena pronto, ricomponi con le metriche giuste
+    if (formText && (document as Document & { fonts?: FontFaceSet }).fonts) {
+      document.fonts
+        .load('900 80px "Fraunces"')
+        .then(() => {
+          if (formRef.current) assignWord();
+        })
+        .catch(() => {});
+    }
 
     let raf = 0;
     const time0 = performance.now();

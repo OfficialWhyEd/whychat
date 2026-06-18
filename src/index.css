@@ -17,6 +17,20 @@
   --font-sans: "Outfit", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-serif: "DM Serif Display", Georgia, serif;
+  --font-display: "Fraunces", "DM Serif Display", Georgia, serif;
+}
+
+/* Display espressivo (Fraunces): alto contrasto, ink-trap netti (SOFT 0),
+   alternate "wonky" (WONK 1). Lo stile-scritto drammatico del riferimento. */
+.display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.display-i {
+  font-style: italic;
 }
 
 /* ─── Base ─────────────────────────────────────────────────────────────── */

@@ -45,7 +45,7 @@ export default function Sidebar({
           <div className="-m-1">
             <SoulOrb size={48} active={streaming} />
           </div>
-          <div className="text-[1.02rem] font-medium tracking-tight text-paper">
+          <div className="display text-[1.4rem] leading-none text-paper">
             Why<span className="text-signal">Chat</span>
           </div>
         </div>
