@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
-import CommandComposer, { type Mode } from "./components/CommandComposer";
+import AnimatedTextCycle from "./components/AnimatedTextCycle";
+import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
 import OriginButton from "./components/OriginButton";
@@ -11,7 +12,7 @@ import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
 import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
-import { OPENERS } from "./persona/openers";
+import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
 
 let counter = 0;
@@ -37,7 +38,8 @@ function Chat() {
   const [model, setModel] = useState("whychat-5.5");
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
-  const [sidebar, setSidebar] = useState(false);
+  // aperta di default su desktop, chiusa su mobile; poi si apre/chiude col toggle
+  const [sidebar, setSidebar] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -54,9 +56,12 @@ function Chat() {
     if (streaming) scrollToBottom();
   }, [messages, streaming, scrollToBottom]);
 
-  const send = async (text: string) => {
+  const send = async (text: string, modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
+    // un'apertura legata a una modalità avvia (e fa continuare) la chat in quella modalità
+    const useMode = modeOverride ?? mode;
+    if (modeOverride && modeOverride !== mode) setMode(modeOverride);
     const userMsg: Message = { id: uid(), role: "user", content: text };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
@@ -90,9 +95,20 @@ function Chat() {
       );
 
     try {
-      if (mode === "deep") {
-        const out = await deepThink(history);
-        patch(out, true);
+      if (useMode === "deep") {
+        const { thoughts, text } = await deepThink(history);
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === aiMsg.id ? { ...m, content: text, thoughts, streaming: false } : m,
+                  ),
+                }
+              : c,
+          ),
+        );
       } else {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -104,7 +120,7 @@ function Chat() {
             patch(acc);
           },
           ctrl.signal,
-          mode,
+          useMode,
           model,
         );
         patch(acc, true);
@@ -188,8 +204,8 @@ function Chat() {
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
             onClick={() => setSidebar((s) => !s)}
-            aria-label="Cronologia"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper md:hidden"
+            aria-label={sidebar ? "Chiudi cronologia" : "Apri cronologia"}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -256,42 +272,52 @@ function Chat() {
   );
 }
 
-function Hero({ onPick }: { onPick: (t: string) => void }) {
+// etichetta breve della modalità, mostrata su ogni apertura ("che si capisca")
+const MODE_SHORT: Record<Mode, string> = {
+  chat: "chat",
+  canvas: "canvas",
+  deep: "deep",
+  learn: "impara",
+  sheet: "onlytype",
+};
+const modeIcon = (m: Mode) => MODES.find((x) => x.id === m)?.icon ?? null;
+
+function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
+  // set simmetrico e SEMPRE DIVERSO, scelto una volta all'apertura della schermata
+  const [openers] = useState(() => pickOpeners(4));
   return (
     <div className="rise flex flex-col items-center text-center">
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
       <div style={{ height: "clamp(170px, 28vh, 260px)" }} />
 
       <p className="max-w-sm text-balance text-[1.05rem] font-light leading-relaxed text-dim">
-        L'anima digitale di WhyEd: la sua coscienza, il suo modo di pensare e creare.
-        <span className="serif-i text-paper"> Parlami.</span>
+        L'anima digitale di WhyEd: la sua coscienza, il suo modo di{" "}
+        <AnimatedTextCycle
+          words={["pensare", "creare", "scrivere", "comporre", "immaginare"]}
+          interval={2600}
+          className="serif-i text-ember"
+        />
+        .<span className="serif-i text-paper"> Parlami.</span>
       </p>
 
       <div className="mt-3 h-px w-10 bg-gradient-to-r from-transparent via-signal/50 to-transparent" />
 
-      {/* prompt d'ingresso — righe editoriali, non pillole-card */}
-      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-1.5 sm:grid-cols-2">
-        {OPENERS.map((o, i) => (
+      {/* aperture — simmetriche, sempre diverse, per lo più legate alle modalità */}
+      <div className="mt-8 grid w-full max-w-xl grid-cols-1 items-stretch gap-2 sm:grid-cols-2">
+        {openers.map((o) => (
           <OriginButton
-            key={o}
-            onClick={() => onPick(o)}
+            key={o.text}
+            onClick={() => onPick(o.text, o.mode)}
             fill="rgba(201,75,37,0.18)"
-            className="group rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] px-4 py-3 text-[0.85rem] text-dim transition-colors duration-200 hover:border-signal/40 hover:text-paper"
+            className="group h-full rounded-xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.55)] px-3.5 py-3 text-[0.85rem] text-dim backdrop-blur-md transition-colors duration-200 hover:border-signal/40 hover:bg-[rgba(22,17,14,0.7)] hover:text-paper"
           >
-            <span className="mono shrink-0 text-[0.5rem] text-faint transition-colors group-hover:text-signal">
-              {String(i + 1).padStart(2, "0")}
+            <span className="shrink-0 text-faint transition-colors group-hover:text-signal" aria-hidden>
+              {modeIcon(o.mode)}
             </span>
-            <span className="min-w-0 flex-1 text-left">{o}</span>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
-              className="shrink-0 -translate-x-1.5 text-signal opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100"
-            >
-              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <span className="min-w-0 flex-1 truncate text-left">{o.text}</span>
+            <span className="mono shrink-0 text-[0.46rem] uppercase text-faint/70 transition-colors group-hover:text-ember">
+              {MODE_SHORT[o.mode]}
+            </span>
           </OriginButton>
         ))}
       </div>

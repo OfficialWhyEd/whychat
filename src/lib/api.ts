@@ -10,6 +10,52 @@ export interface ChatMessage {
   content: string;
 }
 
+// Status transitori del gateway: vale la pena riprovare (Worker freddo, Groq lento).
+const TRANSIENT = new Set([502, 503, 504]);
+
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      reject(new DOMException("Aborted", "AbortError"));
+    });
+  });
+
+/**
+ * POST con retry sui 502/503/504 (Bad Gateway & co.): fino a 3 tentativi con
+ * backoff crescente. Riprova solo PRIMA che lo stream parta → nessun token
+ * duplicato. Un AbortError interrompe subito, senza ritentare.
+ */
+async function postWithRetry(
+  path: string,
+  body: unknown,
+  signal: AbortSignal | undefined,
+  attempts = 3,
+): Promise<Response> {
+  let last: Response | null = null;
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetch(`${WORKER_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!TRANSIENT.has(res.status) || i === attempts - 1) return res;
+    last = res;
+    await sleep(600 * (i + 1), signal); // 600ms, 1200ms
+  }
+  return last!;
+}
+
+/** Errore leggibile a partire dalla risposta non-ok (niente "errore 502" crudo). */
+async function readError(res: Response): Promise<string> {
+  if (TRANSIENT.has(res.status))
+    return "Il server è momentaneamente occupato. Riprova tra un istante.";
+  const err = (await res.json().catch(() => ({}))) as { error?: string };
+  return err.error ?? `Qualcosa è andato storto (${res.status}).`;
+}
+
 /**
  * Streaming chat verso il Worker (Groq SSE, formato OpenAI).
  * onToken viene chiamato per ogni frammento di testo.
@@ -21,16 +67,14 @@ export async function streamChat(
   mode = "chat",
   model = "whychat-5.5",
 ): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, visitorId: visitorId(), name: getName(), mode, model }),
+  const res = await postWithRetry(
+    "/api/chat",
+    { messages, visitorId: visitorId(), name: getName(), mode, model },
     signal,
-  });
+  );
 
   if (!res.ok || !res.body) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? `errore ${res.status}`);
+    throw new Error(await readError(res));
   }
 
   const reader = res.body.getReader();
@@ -72,17 +116,19 @@ export async function fetchDreams(): Promise<Dream[]> {
   return data.dreams ?? [];
 }
 
-/** Modalità pensiero profondo (Gemini, risposta intera). */
-export async function deepThink(messages: ChatMessage[]): Promise<string> {
-  const res = await fetch(`${WORKER_URL}/api/think`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, visitorId: visitorId(), name: getName() }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? `errore ${res.status}`);
-  }
-  const data = (await res.json()) as { text?: string };
-  return data.text ?? "";
+export interface DeepResult {
+  thoughts: string; // il ragionamento del modello (vero, dinamico)
+  text: string; // la risposta finale
+}
+
+/** Modalità pensiero profondo (Gemini con thinking nativo): ragionamento + risposta. */
+export async function deepThink(messages: ChatMessage[]): Promise<DeepResult> {
+  const res = await postWithRetry(
+    "/api/think",
+    { messages, visitorId: visitorId(), name: getName() },
+    undefined,
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { thoughts?: string; text?: string };
+  return { thoughts: data.thoughts ?? "", text: data.text ?? "" };
 }

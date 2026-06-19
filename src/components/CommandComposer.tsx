@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import OriginButton from "./OriginButton";
+import { Typewriter } from "./Typewriter";
+
+// Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
+const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
 export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet";
 
@@ -27,15 +31,20 @@ export const MODES: ModeDef[] = [
   { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: I("M12 3v18M3 12h18", <circle cx="12" cy="12" r="9" />) },
 ];
 
+// Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
+// (accelera andandosene). Insieme = "ease in e ease out".
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+const EASE_IN = [0.55, 0, 1, 0.45] as const;
+
 const container = {
   hidden: { opacity: 0, height: 0 },
-  show: { opacity: 1, height: "auto", transition: { height: { duration: 0.32 }, staggerChildren: 0.05 } },
-  exit: { opacity: 0, height: 0, transition: { height: { duration: 0.24 }, opacity: { duration: 0.16 } } },
+  show: { opacity: 1, height: "auto", transition: { height: { duration: 0.32, ease: EASE_OUT }, staggerChildren: 0.05 } },
+  exit: { opacity: 0, height: 0, transition: { height: { duration: 0.24, ease: EASE_IN }, opacity: { duration: 0.16 } } },
 };
 const itemV = {
   hidden: { opacity: 0, y: 14 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.26 } },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.16 } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.26, ease: EASE_OUT } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.16, ease: EASE_IN } },
 };
 
 interface Props {
@@ -142,22 +151,30 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             </svg>
           </button>
 
-          <textarea
-            ref={ref}
-            value={value}
-            rows={1}
-            disabled={disabled}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-              if (e.key === "Escape") setMenu(false);
-            }}
-            placeholder={mode === "sheet" ? "Scrivi un pensiero sul foglio…" : "Scrivi a WhyChat…"}
-            className="scroll-thin max-h-[200px] flex-1 resize-none bg-transparent py-2.5 text-[0.98rem] leading-relaxed text-paper placeholder:text-faint focus:outline-none"
-          />
+          <div className="relative flex-1">
+            {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
+            {!value && mode !== "sheet" && (
+              <div className="pointer-events-none absolute left-0 top-0 flex h-full items-center overflow-hidden whitespace-nowrap py-2.5 text-[0.98rem] leading-relaxed text-faint">
+                <Typewriter text={PLACEHOLDERS} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
+              </div>
+            )}
+            <textarea
+              ref={ref}
+              value={value}
+              rows={1}
+              disabled={disabled}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+                if (e.key === "Escape") setMenu(false);
+              }}
+              placeholder={mode === "sheet" ? "Scrivi un pensiero sul foglio…" : ""}
+              className="scroll-thin max-h-[200px] w-full resize-none bg-transparent py-2.5 text-[0.98rem] leading-relaxed text-paper placeholder:text-faint focus:outline-none"
+            />
+          </div>
 
           {streaming ? (
             <button

@@ -1,5 +1,6 @@
 import { relativeTime, type Chat } from "../lib/chats";
 import SoulOrb from "./SoulOrb";
+import SignatureMark from "./SignatureMark";
 
 // L'orb è l'anima-logo di WhyChat. Ora canvas 2D puro: leggero, import diretto.
 
@@ -35,19 +36,28 @@ export default function Sidebar({
       />
 
       <aside
-        className={`fixed z-40 flex h-full w-[268px] flex-col border-r border-[var(--color-line)] bg-[rgba(16,13,11,0.72)] backdrop-blur-xl transition-transform duration-300 md:static md:z-10 md:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
+        className={`fixed z-40 flex h-full flex-col border-[var(--color-line)] bg-[rgba(16,13,11,0.72)] backdrop-blur-xl transition-[transform,width] duration-300 md:static md:z-10 ${
+          open
+            ? "w-[268px] translate-x-0 border-r"
+            : "w-[268px] -translate-x-full border-r md:w-0 md:translate-x-0 md:overflow-hidden md:border-r-0"
         }`}
-        style={{ willChange: "transform" }}
+        style={{ willChange: "transform,width" }}
       >
-        {/* brand: l'orb è il logo */}
-        <div className="flex items-center gap-1 px-3 pb-3 pt-3">
-          <div className="-m-1">
-            <SoulOrb size={48} active={streaming} />
+        {/* brand: orb + firma scritta a mano, con chiusura sidebar */}
+        <div className="flex items-center gap-1.5 px-3 pb-3 pt-3">
+          <div className="-m-1 shrink-0">
+            <SoulOrb size={44} active={streaming} />
           </div>
-          <div className="display text-[1.4rem] leading-none text-paper">
-            Why<span className="text-signal">Chat</span>
-          </div>
+          <SignatureMark className="h-9 w-auto min-w-0 flex-1 text-paper" />
+          <button
+            onClick={onClose}
+            aria-label="Chiudi cronologia"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-faint transition hover:bg-[rgba(242,239,233,0.06)] hover:text-paper"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
 
         {/* nuova chat */}
@@ -98,7 +108,7 @@ export default function Sidebar({
                       >
                         {c.title}
                       </span>
-                      <span className="mono shrink-0 text-[0.5rem] text-faint">
+                      <span className="mono shrink-0 text-[0.5rem] text-faint transition-opacity group-hover:opacity-0">
                         {relativeTime(c.ts)}
                       </span>
                     </button>

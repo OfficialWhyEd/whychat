@@ -20,6 +20,7 @@ interface TextNode {
 export default function BlankSheet() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cursorRef = useRef<HTMLDivElement>(null);
   const drawing = useRef(false);
   const last = useRef({ x: 0, y: 0 });
   const [tool, setTool] = useState<Tool>("pen");
@@ -27,6 +28,22 @@ export default function BlankSheet() {
   const [size, setSize] = useState(3);
   const [texts, setTexts] = useState<TextNode[]>([]);
   const nextId = useRef(1);
+
+  // diametro del pennello in px-schermo: la gomma è 6× lo spessore, come nel disegno.
+  // È lo stesso valore usato in onMove → il cerchio mostra ESATTAMENTE l'area che tocchi.
+  const brush = tool === "eraser" ? size * 6 : size;
+  const ringSize = Math.max(brush, 8);
+
+  // Muove il cerchio-pennello scrivendo direttamente sul DOM (transform via ref):
+  // niente setState a ogni pointermove → zero lag, anche su Mac Intel.
+  const moveCursor = (x: number, y: number) => {
+    const el = cursorRef.current;
+    if (el) el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  };
+  const showCursor = (v: boolean) => {
+    const el = cursorRef.current;
+    if (el) el.style.opacity = v ? "1" : "0";
+  };
 
   // dimensiona il canvas al contenitore (una volta + su resize, preservando il disegno)
   useEffect(() => {
@@ -69,9 +86,10 @@ export default function BlankSheet() {
   };
 
   const onMove = (e: React.PointerEvent) => {
+    const { x, y } = pos(e);
+    moveCursor(x, y); // segue sempre il puntatore, anche senza disegnare
     if (!drawing.current) return;
     const ctx = canvasRef.current!.getContext("2d")!;
-    const { x, y } = pos(e);
     ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
     ctx.strokeStyle = color;
     ctx.lineWidth = tool === "eraser" ? size * 6 : size;
@@ -100,10 +118,32 @@ export default function BlankSheet() {
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
-          onPointerLeave={onUp}
+          onPointerEnter={() => showCursor(tool !== "text")}
+          onPointerLeave={() => {
+            onUp();
+            showCursor(false);
+          }}
           className="absolute inset-0"
-          style={{ touchAction: "none", cursor: tool === "text" ? "text" : "crosshair" }}
+          style={{ touchAction: "none", cursor: tool === "text" ? "text" : "none" }}
         />
+
+        {/* Puntatore-pennello stile Photoshop: cerchio che mostra l'area esatta del
+            tratto e si ingrandisce/rimpicciolisce con lo spessore. Mosso via ref (no lag). */}
+        {tool !== "text" && (
+          <div
+            ref={cursorRef}
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 rounded-full opacity-0"
+            style={{
+              width: ringSize,
+              height: ringSize,
+              border: `1.5px solid ${tool === "eraser" ? "rgba(242,239,233,0.85)" : color}`,
+              boxShadow: "0 0 0 1px rgba(10,9,8,0.55)",
+              transition: "width 110ms ease-in-out, height 110ms ease-in-out, border-color 120ms",
+              willChange: "transform",
+            }}
+          />
+        )}
         {texts.map((t) => (
           <textarea
             key={t.id}

@@ -23,10 +23,13 @@ export function loadChats(): Chat[] {
 
 export function saveChats(chats: Chat[]) {
   try {
-    // tieni le ultime 50, pulisci i flag transitori (streaming)
+    // tieni le ultime 50, pulisci i flag transitori (streaming) ma CONSERVA il
+    // ragionamento del deep thinking (thoughts) così resta dopo un reload
     const clean = chats.slice(0, 50).map((c) => ({
       ...c,
-      messages: c.messages.map(({ id, role, content }) => ({ id, role, content })),
+      messages: c.messages.map(({ id, role, content, thoughts }) =>
+        thoughts ? { id, role, content, thoughts } : { id, role, content },
+      ),
     }));
     localStorage.setItem(LS_KEY, JSON.stringify(clean));
   } catch {
