@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { groupTurn, groupPredict, type GroupAgentMeta, type GroupMsg, type DeepResult } from "../lib/api";
 import { renderMarkdown } from "../lib/markdown";
-import { Spinner } from "./Spinner";
+import { DotLoader, WHYCHAT_LOADING_FRAMES } from "./DotLoader";
 
 /**
  * Group Prediction (beta) — la simulazione stile MiroFish in chat:
@@ -128,8 +128,13 @@ export default function GroupChat({ onExit }: { onExit: () => void }) {
               ))}
               <AnimatePresence>{typing && <Typing agent={typing} />}</AnimatePresence>
               {phase === "predicting" && (
-                <div className="flex items-center gap-2 px-1 text-ember">
-                  <Spinner variant="infinite" size={22} />
+                <div className="flex items-center gap-3 px-1 text-ember">
+                  <DotLoader
+                    frames={WHYCHAT_LOADING_FRAMES}
+                    duration={110}
+                    className="gap-[3px]"
+                    dotClassName="bg-[rgba(242,239,233,0.12)] [&.active]:bg-ember"
+                  />
                   <span className="mono text-[0.6rem]">IL CERCHIO SI CHIUDE · STO PREDICENDO…</span>
                 </div>
               )}
