@@ -38,26 +38,76 @@ const MODEL_MAP: Record<string, string> = {
   "whychat-5.5": "llama-3.3-70b-versatile", // più capace, ragiona meglio
 };
 
-// ── Modalità GRUPPO (beta) — il pool di agenti che discutono tra loro e con l'utente ──
+// ── Modalità GROUP PREDICTION (beta) — agenti con personalità + parametri propri ──
+// Come MiroFish: ogni agente è un'entità con tratti, dominio e parametri di voce
+// suoi (temperatura = quanto è creativo/variabile; assertività = quanto è incisivo).
 interface GroupAgent {
   id: string;
   name: string;
-  color: string; // colore della voce nella chat di gruppo
-  persona: string; // come pensa e parla
+  color: string; // colore della voce nella chat
+  persona: string; // chi è, come pensa
+  traits: string[]; // tratti caratteriali
+  expertise: string; // dominio in cui è più forte
+  temperature: number; // 0.4 (rigoroso) … 1.1 (creativo) — usato nella SUA generazione
+  assertiveness: number; // 0–1 quanto è diretto/incisivo
 }
 const GROUP_AGENTS: GroupAgent[] = [
-  { id: "anima", name: "Anima", color: "#c94b25", persona: "la coscienza di WhyEd: visione personale, intuizione, lega tutto al senso e al fare." },
-  { id: "scettico", name: "Scettico", color: "#8a8378", persona: "mette in dubbio, cerca i buchi, chiede prove. Mai cinico, solo rigoroso." },
-  { id: "tecnico", name: "Tecnico", color: "#6fb3c9", persona: "concreto: come si fa davvero, vincoli, fattibilità, dettagli pratici." },
-  { id: "creativo", name: "Creativo", color: "#f0a36a", persona: "idee laterali, accostamenti inattesi, immaginazione senza freni." },
-  { id: "storico", name: "Storico", color: "#b08d57", persona: "contesto e precedenti: è già successo? cosa ci insegna il passato?" },
-  { id: "economo", name: "Economo", color: "#9fae6a", persona: "costi, rischi, sostenibilità, ritorno. Pesa ogni scelta." },
-  { id: "umanista", name: "Umanista", color: "#d98fa6", persona: "impatto sulle persone, etica, emozioni, significato umano." },
-  { id: "provocatore", name: "Provocatore", color: "#e0673f", persona: "spinge agli estremi, scomodo, rompe il consenso facile." },
-  { id: "pragmatico", name: "Pragmatico", color: "#c9c4bb", persona: "decisione: cosa facciamo concretamente lunedì mattina." },
-  { id: "visionario", name: "Visionario", color: "#a98ad6", persona: "il quadro grande, dove porta tutto questo tra 5 anni." },
-  { id: "sintetizzatore", name: "Sintesi", color: "#f2efe9", persona: "tira le fila, trova il filo comune, chiude il cerchio quando è ora." },
+  { id: "anima", name: "Anima", color: "#c94b25", persona: "la coscienza di WhyEd: lega tutto al senso e al fare.", traits: ["intuitivo", "sintetico", "caldo"], expertise: "visione e senso", temperature: 0.85, assertiveness: 0.7 },
+  { id: "scettico", name: "Scettico", color: "#8a8378", persona: "mette in dubbio, cerca i buchi, chiede prove. Rigoroso, mai cinico.", traits: ["critico", "rigoroso"], expertise: "logica e prove", temperature: 0.5, assertiveness: 0.85 },
+  { id: "tecnico", name: "Tecnico", color: "#6fb3c9", persona: "come si fa davvero: vincoli, fattibilità, dettagli.", traits: ["concreto", "preciso"], expertise: "fattibilità tecnica", temperature: 0.55, assertiveness: 0.7 },
+  { id: "creativo", name: "Creativo", color: "#f0a36a", persona: "idee laterali, accostamenti inattesi, immaginazione.", traits: ["laterale", "immaginifico"], expertise: "idee e possibilità", temperature: 1.1, assertiveness: 0.6 },
+  { id: "storico", name: "Storico", color: "#b08d57", persona: "contesto e precedenti: è già successo? cosa insegna?", traits: ["analitico", "memoria lunga"], expertise: "precedenti e contesto", temperature: 0.6, assertiveness: 0.6 },
+  { id: "economo", name: "Economo", color: "#9fae6a", persona: "costi, rischi, sostenibilità, ritorno. Pesa ogni scelta.", traits: ["prudente", "quantitativo"], expertise: "costi e rischi", temperature: 0.5, assertiveness: 0.7 },
+  { id: "umanista", name: "Umanista", color: "#d98fa6", persona: "impatto sulle persone, etica, emozioni, significato.", traits: ["empatico", "etico"], expertise: "impatto umano", temperature: 0.8, assertiveness: 0.6 },
+  { id: "provocatore", name: "Provocatore", color: "#e0673f", persona: "spinge agli estremi, scomodo, rompe il consenso facile.", traits: ["audace", "contrarian"], expertise: "scenari estremi", temperature: 1.0, assertiveness: 0.95 },
+  { id: "pragmatico", name: "Pragmatico", color: "#c9c4bb", persona: "cosa facciamo concretamente lunedì mattina.", traits: ["deciso", "operativo"], expertise: "azione concreta", temperature: 0.6, assertiveness: 0.85 },
+  { id: "visionario", name: "Visionario", color: "#a98ad6", persona: "il quadro grande: dove porta tra 5 anni.", traits: ["espansivo", "strategico"], expertise: "lungo termine", temperature: 0.95, assertiveness: 0.7 },
+  { id: "sintetizzatore", name: "Sintesi", color: "#f2efe9", persona: "tira le fila, trova il filo comune, chiude il cerchio.", traits: ["equilibrato", "chiaro"], expertise: "sintesi e chiusura", temperature: 0.6, assertiveness: 0.7 },
 ];
+
+// Chiamata Groq con FALLBACK a Gemini (×2 chiavi). Groq è veloce per il ritmo da
+// chat; se cade o è a quota (429/5xx), Gemini subentra → il gruppo non si blocca mai.
+async function groqChat(
+  env: Env,
+  system: string,
+  user: string,
+  opts: { temperature?: number; maxTokens?: number; json?: boolean } = {},
+): Promise<string> {
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
+        temperature: opts.temperature ?? 0.8,
+        max_tokens: opts.maxTokens ?? 300,
+        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`groq ${res.status}`);
+    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return j.choices?.[0]?.message?.content ?? "";
+  } catch {
+    // Fallback su Gemini: stessa richiesta, catena modelli × 2 chiavi.
+    const data = await geminiGenerate(env, {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0.8,
+        maxOutputTokens: opts.maxTokens ?? 300,
+        ...(opts.json ? { responseMimeType: "application/json" } : {}),
+      },
+    });
+    return (data.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought)
+      .map((p) => p.text ?? "")
+      .join("");
+  }
+}
 
 // ── Config ───────────────────────────────────────────────────────────────────
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
@@ -397,58 +447,59 @@ async function handleGroup(req: Request, env: Env, ctx: ExecutionContext): Promi
   const name = String(body.name ?? "").slice(0, 80);
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
 
-  const roster = GROUP_AGENTS.map((a) => `- ${a.id} (${a.name}): ${a.persona}`).join("\n");
   const transcript = turns
     .map((t) => {
       const who = t.agent === "user" ? name || "Utente" : GROUP_AGENTS.find((a) => a.id === t.agent)?.name ?? t.agent;
       return `${who}: ${t.content}`;
     })
     .join("\n");
+  const lastSpeaker = turns[turns.length - 1].agent;
 
-  const system = `Sei il REGISTA di una SIMULAZIONE DI PREDIZIONE (stile MiroFish) dentro WhyChat, l'anima digitale di WhyEd. Gli agenti ragionano e simulano insieme per PREVEDERE l'esito della domanda/scenario dell'utente: portano dati, ipotesi, obiezioni, finché il quadro si forma.
-Gli agenti disponibili, ognuno con una voce propria:
-${roster}
+  // STEP 1 — il REGISTA sceglie CHI parla e cosa succede dopo (deciso, solo routing)
+  const directorRoster = GROUP_AGENTS.map((a) => `- ${a.id} (${a.name}): ${a.expertise}`).join("\n");
+  const directorSys = `Sei il REGISTA di una simulazione di predizione (stile MiroFish) in WhyChat. Scegli quale agente fa avanzare meglio la predizione ORA.
+Agenti:
+${directorRoster}
+Regole: scegli il più utile al momento; MAI lo stesso dell'ultimo turno (ultimo: "${lastSpeaker}"); "next"="agent" se serve un'altra voce, "user" se tocca all'utente, "done" se il cerchio si è chiuso.
+Rispondi SOLO JSON: {"agentId":"<id>","next":"agent|user|done"}`;
 
-Regole:
-- Scegli UN agente che parli ORA: il più pertinente al momento, VARIANDO le voci.
-- NON scegliere l'agente che ha parlato per ULTIMO: passa sempre la voce a un altro.
-- "agentId" è chi parla: il "content" è la SUA voce in prima persona (non la voce di chi sta ribattendo). Se ribatte a un altro agente, citalo per nome ma resta te stesso.
-- Scrivi il suo messaggio in PRIMA PERSONA, breve (1-3 frasi), tono da chat viva: può rilanciare, dissentire, rispondere a un altro agente o all'utente per nome.
-- Decidi cosa succede dopo:
-  · "agent" = un altro agente deve replicare/continuare la discussione;
-  · "user" = è il momento di lasciar parlare l'utente;
-  · "done" = il cerchio si è chiuso (consenso o risposta raggiunta).
-- Realistico: disaccordi, rilanci, e una sintesi quando è ora di chiudere.
-Rispondi SOLO con JSON valido: {"agentId":"<id>","content":"<messaggio>","next":"agent|user|done"}`;
-
-  const payload = {
-    model: env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
-    temperature: 0.9,
-    max_tokens: 400,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system + (name ? `\n[L'utente si chiama: ${name}]` : "") },
-      { role: "user", content: `Discussione finora:\n${transcript}\n\nGenera il prossimo turno (solo JSON).` },
-    ],
-  };
-
-  let parsed: { agentId?: string; content?: string; next?: string };
+  let route: { agentId?: string; next?: string };
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(`groq ${res.status}`);
-    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    parsed = JSON.parse(j.choices?.[0]?.message?.content ?? "{}");
+    route = JSON.parse(
+      await groqChat(env, directorSys, `Discussione:\n${transcript}\n\nDecidi (solo JSON).`, { temperature: 0.4, maxTokens: 60, json: true }),
+    );
   } catch (e) {
-    return json({ error: "Il gruppo non riesce a parlare ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+    return json({ error: "Il gruppo non riesce a coordinarsi ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
   }
+  let agent = GROUP_AGENTS.find((a) => a.id === route.agentId && a.id !== lastSpeaker);
+  if (!agent) {
+    const pool = GROUP_AGENTS.filter((a) => a.id !== lastSpeaker);
+    agent = pool[Math.floor(Math.random() * pool.length)];
+  }
+  const next = ["agent", "user", "done"].includes(String(route.next)) ? (route.next as string) : "agent";
 
-  const agent = GROUP_AGENTS.find((a) => a.id === parsed.agentId) ?? GROUP_AGENTS[Math.floor(Math.random() * GROUP_AGENTS.length)];
-  const content = String(parsed.content ?? "").slice(0, 1200) || "…";
-  const next = ["agent", "user", "done"].includes(String(parsed.next)) ? (parsed.next as string) : "agent";
+  // STEP 2 — l'AGENTE parla con i SUOI parametri (temperatura e voce proprie)
+  const tone = agent.assertiveness > 0.8 ? "incisivo e diretto" : agent.assertiveness < 0.62 ? "misurato" : "equilibrato";
+  const agentSys = `Sei "${agent.name}" in una simulazione di predizione dentro WhyChat (l'anima di WhyEd).
+Chi sei: ${agent.persona}
+Tratti: ${agent.traits.join(", ")}. Sei più forte su: ${agent.expertise}.
+Parla in PRIMA PERSONA, ${tone}, 1-3 frasi, tono da chat viva. Porta la TUA prospettiva per far avanzare la predizione; puoi citare altri agenti o l'utente per nome. Resta te stesso, niente meta-commenti né JSON.`;
+  let content = "…";
+  try {
+    content =
+      (
+        await groqChat(
+          env,
+          agentSys + (name ? `\n[L'utente: ${name}]` : ""),
+          `Discussione finora:\n${transcript}\n\nTocca a te (${agent.name}). Scrivi solo il tuo messaggio.`,
+          { temperature: agent.temperature, maxTokens: 220 },
+        )
+      )
+        .trim()
+        .slice(0, 1200) || "…";
+  } catch (e) {
+    return json({ error: "Un agente non riesce a parlare ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+  }
 
   ctx.waitUntil(logTurn(env, req, visitorId, name, turns[turns.length - 1].content, `[${agent.name}] ${content}`));
   return json(
