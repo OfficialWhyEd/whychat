@@ -175,9 +175,9 @@ export default function BlankSheet() {
         )}
       </div>
 
-      {/* barra strumenti */}
-      <div className="mt-3 flex items-center justify-center gap-2">
-        <div className="glass flex items-center gap-1 rounded-full p-1.5">
+      {/* barra strumenti — su mobile scorre invece di sovrapporsi */}
+      <div className="scroll-thin mt-3 flex items-center justify-center gap-2 overflow-x-auto px-2">
+        <div className="glass flex w-max shrink-0 items-center gap-1 rounded-full p-1.5">
           {([
             ["pen", "M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"],
             ["text", "M4 7V5h16v2 M9 5v14 M7 19h4"],
