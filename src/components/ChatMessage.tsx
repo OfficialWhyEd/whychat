@@ -3,6 +3,7 @@ import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
 import { ShiningText } from "./ShiningText";
+import { WLoader } from "./WLoader";
 
 export interface Message {
   id: string;
@@ -55,7 +56,10 @@ export default function ChatMessage({ msg }: { msg: Message }) {
         )}
 
         {msg.streaming && !msg.content ? (
-          <ShiningText text="Sto ragionando…" className="text-[0.95rem]" />
+          <div className="flex items-center gap-2 text-ember">
+            <WLoader size={20} />
+            <ShiningText text="Sto ragionando…" className="text-[0.95rem]" />
+          </div>
         ) : (
           <>
             {parseSegments(msg.content || "").map((seg, i) =>
