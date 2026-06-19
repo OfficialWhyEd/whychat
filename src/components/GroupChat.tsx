@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { groupTurn, groupPredict, type GroupAgentMeta, type GroupMsg, type DeepResult } from "../lib/api";
 import { renderMarkdown } from "../lib/markdown";
 import { DotLoader, WHYCHAT_LOADING_FRAMES } from "./DotLoader";
+import { GlowCard } from "./GlowCard";
 
 /**
  * Group Prediction (beta) — la simulazione stile MiroFish in chat:
@@ -260,11 +261,12 @@ function Typing({ agent }: { agent: GroupAgentMeta }) {
 
 function PredictionCard({ p }: { p: DeepResult }) {
   return (
+    <GlowCard glowColor="orange" className="mt-2">
     <motion.div
       initial={{ opacity: 0, y: 14, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 24 }}
-      className="glass-sheen mt-2 overflow-hidden rounded-2xl border border-signal/40 bg-[rgba(201,75,37,0.06)]"
+      className="glass-sheen overflow-hidden rounded-2xl border border-signal/40 bg-[rgba(201,75,37,0.06)]"
     >
       <div className="mono flex items-center gap-2 border-b border-[var(--color-line)] px-4 py-2.5 text-[0.55rem] text-ember">
         <span className="text-signal">✦</span> PREDIZIONE DEL GRUPPO
@@ -285,5 +287,6 @@ function PredictionCard({ p }: { p: DeepResult }) {
         </details>
       )}
     </motion.div>
+    </GlowCard>
   );
 }
