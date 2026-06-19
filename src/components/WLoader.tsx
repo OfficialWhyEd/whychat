@@ -7,8 +7,9 @@ import { useEffect, useRef, useState } from "react";
  */
 const KEYFRAMES = `@keyframes wDraw {
   0%   { stroke-dashoffset: var(--w-len); }
-  45%  { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: calc(var(--w-len) * -1); }
+  50%  { stroke-dashoffset: 0; }
+  55%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: var(--w-len); }
 }`;
 let injected = false;
 
@@ -37,7 +38,7 @@ export function WLoader({ size = 20, className = "" }: { size?: number; classNam
         strokeLinejoin="round"
         style={
           len
-            ? ({ strokeDasharray: len, "--w-len": len, animation: "wDraw 2s ease-in-out infinite" } as React.CSSProperties)
+            ? ({ strokeDasharray: len, "--w-len": len, animation: "wDraw 1.9s ease-in-out infinite" } as React.CSSProperties)
             : { opacity: 0 }
         }
       />
