@@ -121,16 +121,42 @@ export interface DeepResult {
   text: string; // la risposta finale
 }
 
-/** Modalità pensiero profondo (Gemini con thinking nativo): ragionamento + risposta. */
-export async function deepThink(messages: ChatMessage[]): Promise<DeepResult> {
-  const res = await postWithRetry(
-    "/api/think",
-    { messages, visitorId: visitorId(), name: getName() },
-    undefined,
-  );
-  if (!res.ok) throw new Error(await readError(res));
-  const data = (await res.json()) as { thoughts?: string; text?: string };
-  return { thoughts: data.thoughts ?? "", text: data.text ?? "" };
+/**
+ * Modalità pensiero profondo (Gemini thinking nativo) IN STREAMING: il
+ * ragionamento e la risposta arrivano token dopo token, come su Claude.
+ * onThought = pezzo di ragionamento; onAnswer = pezzo di risposta finale.
+ */
+export async function deepThink(
+  messages: ChatMessage[],
+  onThought: (delta: string) => void,
+  onAnswer: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await postWithRetry("/api/think", { messages, visitorId: visitorId(), name: getName() }, signal);
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const d = t.slice(5).trim();
+      if (!d) continue;
+      try {
+        const ev = JSON.parse(d) as { t?: string; d?: string };
+        if (ev.t === "thought" && ev.d) onThought(ev.d);
+        else if (ev.t === "answer" && ev.d) onAnswer(ev.d);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
 }
 
 // ── Group Prediction (beta): simulazione a più agenti stile MiroFish ──────────

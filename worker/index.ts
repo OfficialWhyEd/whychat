@@ -396,34 +396,85 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
     parts: [{ text: m.content }],
   }));
 
-  let data: GeminiResp;
-  try {
-    data = await geminiGenerate(env, {
-      systemInstruction: { parts: [{ text: SOUL + (name ? `\n\n[Parli con: ${name}]` : "") }] },
-      contents,
-      generationConfig: {
-        temperature: 0.9, // varietà: il ragionamento non è mai identico
-        maxOutputTokens: 8192,
-        // thinking NATIVO di Gemini 2.5: includeThoughts espone il ragionamento;
-        // thinkingBudget -1 = DINAMICO → il modello sceglie da solo quanto pensare
-        // in base alla complessità. Mai deterministico, sempre adatto alla situazione.
-        thinkingConfig: { includeThoughts: true, thinkingBudget: -1 },
-      },
-    });
-  } catch (e) {
-    return json({ error: "Il pensiero profondo non è disponibile ora. Riprova.", detail: String(e).slice(0, 200) }, 502, cors);
+  const payloadBase = {
+    systemInstruction: { parts: [{ text: SOUL + (name ? `\n\n[Parli con: ${name}]` : "") }] },
+    contents,
+    generationConfig: {
+      temperature: 0.9,
+      maxOutputTokens: 8192,
+      // thinking NATIVO di Gemini 2.5 (dinamico): il ragionamento esce in streaming.
+      thinkingConfig: { includeThoughts: true, thinkingBudget: -1 },
+    },
+  };
+
+  // Apre lo STREAM Gemini provando modelli × chiavi finché uno risponde.
+  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  let upstream: Response | null = null;
+  let last = "";
+  outer: for (const model of geminiModels(env)) {
+    const gen = { ...payloadBase.generationConfig };
+    if (!model.startsWith("gemini-2.5")) delete (gen as Record<string, unknown>).thinkingConfig;
+    const reqBody = JSON.stringify({ ...payloadBase, generationConfig: gen });
+    for (const key of keys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+        last = `${model}:${res.status}`;
+        if (res.status === 400 || res.status === 404) break;
+      } catch (e) {
+        last = `${model}:${(e as Error).message}`;
+      }
+    }
+  }
+  if (!upstream || !upstream.body) {
+    return json({ error: "Il pensiero profondo non è disponibile ora. Riprova.", detail: last }, 502, cors);
   }
 
-  // I part con thought:true sono il ragionamento; gli altri la risposta finale.
-  let thoughts = "";
-  let text = "";
-  for (const p of data.candidates?.[0]?.content?.parts ?? []) {
-    if (!p.text) continue;
-    if (p.thought) thoughts += p.text;
-    else text += p.text;
-  }
-  ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, text));
-  return json({ thoughts, text }, 200, cors);
+  // Trasforma l'SSE di Gemini → nostro SSE: eventi {t:"thought"|"answer", d:"…"}.
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buf = "";
+  let answerAcc = "";
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buf += decoder.decode(chunk, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const j = JSON.parse(d) as GeminiResp;
+          for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+            if (!p.text) continue;
+            if (p.thought) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "thought", d: p.text })}\n\n`));
+            } else {
+              answerAcc += p.text;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "answer", d: p.text })}\n\n`));
+            }
+          }
+        } catch {
+          /* frammento parziale, ignora */
+        }
+      }
+    },
+    flush() {
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answerAcc));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(transform), {
+    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+  });
 }
 
 // ── /api/group — modalità GRUPPO (beta): il regista sceglie il prossimo turno ─

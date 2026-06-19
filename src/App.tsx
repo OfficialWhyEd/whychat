@@ -107,19 +107,36 @@ function Chat() {
 
     try {
       if (useMode === "deep") {
-        const { thoughts, text } = await deepThink(history);
-        setChats((prev) =>
-          prev.map((c) =>
-            c.id === id
-              ? {
-                  ...c,
-                  messages: c.messages.map((m) =>
-                    m.id === aiMsg.id ? { ...m, content: text, thoughts, streaming: false } : m,
-                  ),
-                }
-              : c,
-          ),
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        let thoughts = "";
+        let answer = "";
+        const apply = (done = false) =>
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === aiMsg.id ? { ...m, content: answer, thoughts, streaming: !done } : m,
+                    ),
+                  }
+                : c,
+            ),
+          );
+        await deepThink(
+          history,
+          (d) => {
+            thoughts += d;
+            apply();
+          },
+          (d) => {
+            answer += d;
+            apply();
+          },
+          ctrl.signal,
         );
+        apply(true);
       } else {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
