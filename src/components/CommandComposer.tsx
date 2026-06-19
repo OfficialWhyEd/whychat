@@ -144,7 +144,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       </AnimatePresence>
 
       {/* Barra */}
-      <div className="glass glass-sheen rounded-[26px] p-2 pl-2">
+      <div className="glass glass-sheen rounded-[26px] p-2 pl-2 transition-all duration-300 focus-within:shadow-[0_0_28px_-8px_rgba(201,75,37,0.55)] focus-within:ring-1 focus-within:ring-signal/30">
         <div className="flex items-end gap-2">
           {/* chip modalità → apre la palette */}
           <button
