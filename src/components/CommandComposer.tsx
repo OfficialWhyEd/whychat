@@ -6,7 +6,7 @@ import { Typewriter } from "./Typewriter";
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth";
 
 interface ModeDef {
   id: Mode;
@@ -41,6 +41,13 @@ export const MODES: ModeDef[] = [
         <circle cx="17.5" cy="16" r="2.5" />
       </>
     )) },
+  {
+    id: "earth",
+    label: "WhyEarth",
+    desc: "Il mondo al centro, interattivo",
+    tag: "beta",
+    icon: I("M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", <circle cx="12" cy="12" r="9" />),
+  },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
