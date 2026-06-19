@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
+import GroupChat from "./components/GroupChat";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
@@ -56,6 +57,7 @@ function Chat() {
   const messages = active?.messages ?? [];
   const empty = messages.length === 0;
   const sheet = mode === "sheet";
+  const group = mode === "group";
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -217,7 +219,7 @@ function Chat() {
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Particelle confinate all'area principale → si allineano all'hero e si
             riallineano da sole quando la sidebar si apre/chiude */}
-        <SoulParticles formText={empty && !sheet} modelName={modelName(model)} />
+        <SoulParticles formText={empty && !sheet && !group} modelName={modelName(model)} />
         {/* Top bar */}
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
@@ -239,7 +241,11 @@ function Chat() {
         </header>
 
         {/* Area centrale */}
-        {sheet ? (
+        {group ? (
+          <main className="min-h-0 flex-1">
+            <GroupChat onExit={() => setMode("chat")} />
+          </main>
+        ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
             <div className="mx-auto h-full max-w-4xl">
               <BlankSheet />
@@ -262,8 +268,8 @@ function Chat() {
           </main>
         )}
 
-        {/* Composer */}
-        <footer className="px-4 pb-4 pt-2">
+        {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
+        <footer className={`px-4 pb-4 pt-2 ${group ? "hidden" : ""}`}>
           <div className="mx-auto max-w-2xl">
             <CommandComposer
               onSend={send}
@@ -297,6 +303,7 @@ const MODE_SHORT: Record<Mode, string> = {
   deep: "deep",
   learn: "impara",
   sheet: "onlytype",
+  group: "gruppo",
 };
 const modeIcon = (m: Mode) => MODES.find((x) => x.id === m)?.icon ?? null;
 

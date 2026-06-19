@@ -6,7 +6,7 @@ import { Typewriter } from "./Typewriter";
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group";
 
 interface ModeDef {
   id: Mode;
@@ -29,6 +29,18 @@ export const MODES: ModeDef[] = [
   { id: "deep", label: "Deep thinking", desc: "Ragiona a fondo (Gemini)", tag: "∞", icon: I("M9.5 2a4.5 4.5 0 0 0-4.5 4.5c-.9.5-1.5 1.5-1.5 2.7 0 .9.4 1.8 1 2.4-.3.5-.5 1.1-.5 1.9a3 3 0 0 0 3 3 3 3 0 0 0 3 3V2z M14.5 2a4.5 4.5 0 0 1 4.5 4.5c.9.5 1.5 1.5 1.5 2.7 0 .9-.4 1.8-1 2.4.3.5.5 1.1.5 1.9a3 3 0 0 1-3 3 3 3 0 0 1-3 3V2z") },
   { id: "learn", label: "Apprendimento", desc: "Impara un passo alla volta", icon: I("M22 10L12 5 2 10l10 5 10-5z M6 12v5c0 1 2.5 2.5 6 2.5s6-1.5 6-2.5v-5") },
   { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: I("M12 3v18M3 12h18", <circle cx="12" cy="12" r="9" />) },
+  {
+    id: "group",
+    label: "Group Prediction",
+    desc: "Più agenti predicono insieme",
+    tag: "beta",
+    icon: I("M10.8 8.4 8 13.6M13.2 8.4 16 13.6M9 16.5h6", (
+      <>
+        <circle cx="12" cy="6" r="2.5" />
+        <circle cx="6.5" cy="16" r="2.5" />
+        <circle cx="17.5" cy="16" r="2.5" />
+      </>
+    )) },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in

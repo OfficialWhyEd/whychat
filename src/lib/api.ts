@@ -132,3 +132,44 @@ export async function deepThink(messages: ChatMessage[]): Promise<DeepResult> {
   const data = (await res.json()) as { thoughts?: string; text?: string };
   return { thoughts: data.thoughts ?? "", text: data.text ?? "" };
 }
+
+// ── Group Prediction (beta): simulazione a più agenti stile MiroFish ──────────
+export interface GroupAgentMeta {
+  id: string;
+  name: string;
+  color: string;
+  initial: string;
+}
+export interface GroupTurn {
+  agent: GroupAgentMeta;
+  content: string;
+  next: "agent" | "user" | "done";
+}
+export interface GroupMsg {
+  agent: string; // id agente, oppure "user"
+  content: string;
+}
+
+/** Un turno della discussione: il regista sceglie chi parla e cosa succede dopo. */
+export async function groupTurn(messages: GroupMsg[]): Promise<GroupTurn> {
+  const res = await postWithRetry("/api/group", { messages, visitorId: visitorId(), name: getName() }, undefined);
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as Partial<GroupTurn>;
+  return {
+    agent: d.agent ?? { id: "anima", name: "Anima", color: "#c94b25", initial: "A" },
+    content: d.content ?? "…",
+    next: d.next ?? "user",
+  };
+}
+
+/** La predizione finale (ReportAgent, Gemini ×2 + thinking). */
+export async function groupPredict(messages: GroupMsg[], question: string): Promise<DeepResult & { prediction: string }> {
+  const res = await postWithRetry(
+    "/api/group/predict",
+    { messages, question, visitorId: visitorId(), name: getName() },
+    undefined,
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as { prediction?: string; thoughts?: string };
+  return { prediction: d.prediction ?? "", thoughts: d.thoughts ?? "", text: d.prediction ?? "" };
+}
