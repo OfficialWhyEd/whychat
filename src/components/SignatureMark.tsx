@@ -35,7 +35,17 @@ export default function SignatureMark({ className = "" }: { className?: string }
   const eraseEnd = 0.98; // ritiro breve, poi ricomincia
 
   return (
-    <svg viewBox="0 0 262 92" className={className} fill="none" role="img" aria-label="WhyChat">
+    <motion.svg
+      viewBox="0 0 262 92"
+      className={className}
+      fill="none"
+      role="img"
+      aria-label="WhyChat"
+      style={{ transformOrigin: "left center" }}
+      // "vivo": respira ingrandendosi/rimpicciolendosi con un leggero overshoot (Pixar)
+      animate={{ scale: [1, 1.06, 0.99, 1] }}
+      transition={{ duration: 4.6, ease: "easeInOut", times: [0, 0.4, 0.72, 1], repeat: Infinity }}
+    >
       {STROKES.map((d, i) => {
         const s = (i / N) * drawPhase + 0.001; // inizio scrittura di questo tratto
         const e = s + drawPhase / N + 0.05; // fine scrittura (con leggera sovrapposizione)
@@ -59,6 +69,6 @@ export default function SignatureMark({ className = "" }: { className?: string }
           />
         );
       })}
-    </svg>
+    </motion.svg>
   );
 }
