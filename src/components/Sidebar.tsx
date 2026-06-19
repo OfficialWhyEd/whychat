@@ -2,6 +2,7 @@ import { relativeTime, type Chat } from "../lib/chats";
 import SoulOrb from "./SoulOrb";
 import SignatureMark from "./SignatureMark";
 import { MODES, type Mode } from "./CommandComposer";
+import { ProtocolBadge } from "./ProtocolBadge";
 
 // icona della modalità in cui è nata la chat (default: chat)
 const chatModeIcon = (m?: Mode) => MODES.find((x) => x.id === (m ?? "chat"))?.icon ?? null;
@@ -142,14 +143,15 @@ export default function Sidebar({
         </div>
 
         {/* footer */}
-        <div className="flex items-center gap-2 border-t border-[var(--color-line)] px-3 py-3">
+        <div className="flex flex-col gap-2 border-t border-[var(--color-line)] px-3 py-3">
           <a
             href="#dreams"
             title="I sogni di WhyChat"
-            className="mono flex-1 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
+            className="mono rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
           >
             ☾ SOGNI
           </a>
+          <ProtocolBadge />
         </div>
       </aside>
     </>
