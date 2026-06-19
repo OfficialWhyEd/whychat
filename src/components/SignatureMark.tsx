@@ -28,9 +28,11 @@ const STROKES = [
 
 export default function SignatureMark({ className = "" }: { className?: string }) {
   const N = STROKES.length;
-  const drawPhase = 0.58; // frazione del ciclo dedicata alla scrittura
-  const holdEnd = 0.82; // fino a qui la firma resta completa
-  const eraseEnd = 0.96; // poi si ritira
+  // Un LOGO deve restare leggibile: si scrive in fretta, resta COMPLETO per la gran
+  // parte del ciclo, e solo alla fine si ritira un attimo e ricomincia.
+  const drawPhase = 0.22; // scrittura rapida nel primo 22% del ciclo
+  const holdEnd = 0.9; // resta completo fino al 90% (≈ leggibile quasi sempre)
+  const eraseEnd = 0.98; // ritiro breve, poi ricomincia
 
   return (
     <svg viewBox="0 0 262 92" className={className} fill="none" role="img" aria-label="WhyChat">
@@ -42,7 +44,7 @@ export default function SignatureMark({ className = "" }: { className?: string }
             key={i}
             d={d}
             stroke="currentColor"
-            strokeWidth={4}
+            strokeWidth={4.6}
             strokeLinecap="round"
             strokeLinejoin="round"
             initial={{ pathLength: 0 }}
