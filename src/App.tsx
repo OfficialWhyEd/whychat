@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
+import SilkTrails from "./components/SilkTrails";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
@@ -193,6 +194,7 @@ function Chat() {
 
   return (
     <div className="relative flex h-full">
+      <SilkTrails />
       <InkReveal />
 
       <Sidebar

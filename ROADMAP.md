@@ -1,38 +1,43 @@
 # WhyChat — Roadmap & stato
 
-Tracciamento vivo di cosa è fatto, cosa manca, e le decisioni prese. Nessuna idea va persa.
+Tracciamento vivo. **Niente si perde. Pushare SEMPRE dopo ogni batch.**
+Bar di qualità: tutto allineato, simmetrico, un unico eco visivo — preciso, sinuoso, fatto bene. Mobile/tablet inclusi.
 
-## ✅ Fatto e LIVE (frontend pushato + Worker deployato)
-- **OnlyType**: puntatore-pennello stile Photoshop (cerchio che si ingrandisce con lo spessore).
-- **Robustezza chat**: retry 502/503/504 + messaggi umani.
-- **Easing** in/out su menu composer e cursore.
-- **Sidebar**: tasto elimina che non si sovrappone all'ora; collassabile/chiudibile su desktop e mobile.
-- **Deep thinking**: ragionamento nativo Gemini 2.5 (thinkingBudget dinamico), pannello ✦ RAGIONAMENTO; thoughts persistiti.
-- **Hero**: parola che cicla (AnimatedTextCycle); placeholder barra che si auto-digita (Typewriter).
-- **Aperture**: simmetriche, sempre diverse, legate alle modalità, con icona+etichetta; avviano la chat nella modalità scelta.
-- **Logo firma** scritto a mano (SignatureMark); rimosso Fraunces.
-- **Sicurezza**: fix XSS (escape virgolette nel markdown).
-- **AI robusta**: 2ª chiave Gemini + catena di fallback (flash → flash-latest → … ) × 2 chiavi.
-- **Repo**: link al sito nella descrizione/About.
+## ✅ Fatto e LIVE (pushato + Worker deployato)
+- OnlyType: puntatore-pennello stile Photoshop.
+- Robustezza chat: retry 502/503/504 + messaggi umani.
+- Easing in/out su menu e cursore.
+- Sidebar: tasto elimina non sovrapposto; collassabile/chiudibile desktop+mobile; **stato persistente** (aperto/chiuso come l'hai lasciato).
+- Deep thinking: ragionamento Gemini 2.5 (pannello ✦), thoughts persistiti.
+- Hero: parola che cicla; placeholder barra che si auto-digita.
+- Aperture: simmetriche, sempre diverse, legate alle modalità; avviano in modalità.
+- **Logo FIRMA**: "WhyChat" disegnato a linea singola centrale (path-draw), si scrive→resta→si ritira→ricomincia. (rimosso Fraunces/Caveat-outline)
+- **Allineamento**: particelle confinate all'area principale → allineate all'hero, si riallineano al toggle sidebar (niente più offset 268 fisso).
+- Sicurezza: fix XSS markdown.
+- AI robusta: 2ª chiave Gemini + catena fallback ×2 chiavi.
+- Repo: link sito nella descrizione/About.
 
 ## 🟡 Group Prediction (beta) — motore stile MiroFish
-**Backend FATTO e live:**
-- 11 agenti, ognuno con **personalità + parametri propri** (tratti, dominio, temperatura, assertività).
-- **Regista** (`/api/group`): step 1 sceglie chi parla / next (agent·user·done); step 2 l'agente parla con i SUOI parametri.
-- **ReportAgent** (`/api/group/predict`): predizione finale (esito, confidenza %, scenari, perché) via Gemini ×2 + thinking.
-- **Fallback Groq → Gemini ×2** dentro ogni turno: il gruppo non si blocca mai.
+Backend FATTO e live:
+- 11 agenti con **personalità + parametri propri** (tratti, dominio, temperatura, assertività).
+- Regista (`/api/group`): step1 sceglie chi parla; step2 l'agente parla coi SUOI parametri.
+- ReportAgent (`/api/group/predict`): predizione finale (esito, confidenza, scenari) via Gemini ×2 + thinking.
+- Fallback Groq→Gemini ×2 in ogni turno: non si blocca mai.
 
-**Ancora da fare:**
-- [ ] **UI** della modalità (adattare il `ChatComponent`): bolle multi-agente colorate, "sta scrivendo…", ritardi realistici, ingresso utente, card predizione. ← *prossimo passo critico: senza UI non è usabile*
-- [ ] Modalità "Group Prediction" con tag `beta` nel menu + wiring.
-- [ ] **Memoria + auto-miglioramento** (la "social evolution" di MiroFish): richiede **KV** persistente. BLOCCO: il token Cloudflare attuale non ha permesso KV → serve abilitarlo.
-- [ ] (Opzionale) Generazione dinamica di agenti tarati sul tema (persona-generation dal seed).
+Da fare:
+- [ ] **UI** modalità Group Prediction (adattare `ChatComponent`): bolle multi-agente, "sta scrivendo…", ritardi realistici, ingresso utente, card predizione. Tag `beta` nel menu.
+- [ ] **Memoria + auto-miglioramento** (social evolution): richiede **KV** persistente. BLOCCO: token Cloudflare senza permesso KV → Edo deve abilitarlo.
+- [ ] (Opz.) Generazione dinamica agenti dal seed.
 
-## 🟡 Altre cose aperte
-- [ ] **Modalità legata alla chat**: ogni conversazione ricorda la sua modalità + **icona modalità accanto a ogni chat** in sidebar. (Fatto solo: l'apertura avvia in modalità.)
+## 🔴 DA FARE — repair UI generale (priorità ALTA)
+- [ ] **Responsive mobile/tablet**: oggi "infimo", si sovrappone tutto → rifare per bene.
+- [ ] Audit completo: tasti asimmetrici, sovrapposizioni, cose "bruttine" → sistemare tutte.
+- [ ] **Simbolo modalità accanto a ogni conversazione** in sidebar + ogni chat ricorda la sua modalità (continua in quella).
+- [ ] Aggiungere **poco poco** di effetto scie che seguono il mouse (sobrio, colori brand, poche scie).
 
 ## Decisioni prese
-- Modalità = **"Group Prediction"** (motore di predizione, non semplice chat di gruppo).
-- Gli agenti includono **Anima** (la coscienza di WhyEd) tra gli 11.
-- Divisione modelli: **Groq** = voci veloci degli agenti; **Gemini ×2** = gestione/sintesi (predizione) + rete di fallback.
-- Chiavi e segreti SOLO in Cloudflare + `.dev.vars` (gitignored), mai nel repo.
+- Modalità = "Group Prediction" (motore di predizione).
+- 11 agenti, incluso Anima (coscienza di WhyEd).
+- Groq = voci veloci; Gemini ×2 = gestione/sintesi + fallback.
+- Segreti SOLO in Cloudflare + `.dev.vars` (gitignored), mai nel repo.
+- Da ora: cambi contenuti, niente stravolgimenti; push sempre; lista sempre aggiornata.
