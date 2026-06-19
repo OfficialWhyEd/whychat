@@ -1,6 +1,10 @@
 import { relativeTime, type Chat } from "../lib/chats";
 import SoulOrb from "./SoulOrb";
 import SignatureMark from "./SignatureMark";
+import { MODES, type Mode } from "./CommandComposer";
+
+// icona della modalità in cui è nata la chat (default: chat)
+const chatModeIcon = (m?: Mode) => MODES.find((x) => x.id === (m ?? "chat"))?.icon ?? null;
 
 // L'orb è l'anima-logo di WhyChat. Ora canvas 2D puro: leggero, import diretto.
 
@@ -97,10 +101,13 @@ export default function Sidebar({
                       className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
                     >
                       <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                          isActive ? "bg-signal" : "bg-[var(--color-line2)]"
+                        className={`grid h-4 w-4 shrink-0 place-items-center [&_svg]:h-3.5 [&_svg]:w-3.5 ${
+                          isActive ? "text-signal" : "text-faint"
                         }`}
-                      />
+                        title={MODES.find((x) => x.id === (c.mode ?? "chat"))?.label}
+                      >
+                        {chatModeIcon(c.mode)}
+                      </span>
                       <span
                         className={`min-w-0 flex-1 truncate text-[0.8rem] ${
                           isActive ? "text-paper" : "text-dim"

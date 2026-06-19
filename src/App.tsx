@@ -84,7 +84,7 @@ function Chat() {
       );
     } else {
       id = newChatId();
-      nextChats = [{ id, title: titleFrom(text), ts: Date.now(), messages: [userMsg, aiMsg] }, ...chats];
+      nextChats = [{ id, title: titleFrom(text), ts: Date.now(), mode: useMode, messages: [userMsg, aiMsg] }, ...chats];
     }
     setChats(nextChats);
     saveChats(nextChats);
@@ -165,15 +165,21 @@ function Chat() {
 
   const stop = () => abortRef.current?.abort();
 
+  // su mobile il pannello è un overlay → si chiude dopo l'azione; su desktop resta com'è
+  const closeSidebarIfMobile = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
+  };
   const newChat = () => {
     if (streaming) return;
     setActiveId(null);
-    setSidebar(false);
+    closeSidebarIfMobile();
     setError("");
   };
   const selectChat = (cid: string) => {
+    const c = chats.find((x) => x.id === cid);
     setActiveId(cid);
-    setSidebar(false);
+    if (c?.mode) setMode(c.mode); // la chat continua nella sua modalità
+    closeSidebarIfMobile();
     setError("");
   };
   const deleteChat = (cid: string) => {

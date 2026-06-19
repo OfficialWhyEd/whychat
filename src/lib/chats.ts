@@ -1,9 +1,11 @@
 import type { Message } from "../components/ChatMessage";
+import type { Mode } from "../components/CommandComposer";
 
 export interface Chat {
   id: string;
   title: string;
   ts: number;
+  mode?: Mode; // la modalità in cui è nata: la chat continua in questa
   messages: Message[];
 }
 
