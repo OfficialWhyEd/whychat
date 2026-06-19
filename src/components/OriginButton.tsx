@@ -52,7 +52,9 @@ const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function O
       title={title}
       disabled={disabled}
       onClick={onClick}
-      whileTap={disabled ? undefined : { scale: 0.985 }}
+      whileHover={disabled ? undefined : { scale: 1.025 }}
+      whileTap={disabled ? undefined : { scale: 0.93 }}
+      transition={{ type: "spring", stiffness: 420, damping: 14, mass: 0.7 }}
       onPointerDown={(e) => {
         if (disabled || e.button !== 0) return;
         updateOriginFromPointer(e);
