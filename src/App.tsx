@@ -343,7 +343,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
       <div style={{ height: "clamp(170px, 28vh, 260px)" }} />
 
-      <p className="max-w-sm text-balance text-[1.05rem] font-light leading-relaxed text-dim">
+      <p className="max-w-sm text-balance px-3 text-[1rem] font-light leading-relaxed text-dim sm:px-0 sm:text-[1.05rem]">
         L'anima digitale di WhyEd: la sua coscienza, il suo modo di{" "}
         <AnimatedTextCycle
           words={["pensare", "creare", "scrivere", "comporre", "immaginare"]}
