@@ -38,8 +38,16 @@ function Chat() {
   const [model, setModel] = useState("whychat-5.5");
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
-  // aperta di default su desktop, chiusa su mobile; poi si apre/chiude col toggle
-  const [sidebar, setSidebar] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
+  // stato del pannello: ricorda come l'hai lasciato (aperto/chiuso); default per
+  // viewport solo la prima volta
+  const [sidebar, setSidebar] = useState(() => {
+    const saved = typeof localStorage !== "undefined" ? localStorage.getItem("whychat_sidebar") : null;
+    if (saved !== null) return saved === "1";
+    return typeof window !== "undefined" && window.innerWidth >= 768;
+  });
+  useEffect(() => {
+    localStorage.setItem("whychat_sidebar", sidebar ? "1" : "0");
+  }, [sidebar]);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -185,7 +193,6 @@ function Chat() {
 
   return (
     <div className="relative flex h-full">
-      <SoulParticles formText={empty && !sheet} modelName={modelName(model)} />
       <InkReveal />
 
       <Sidebar
@@ -199,7 +206,10 @@ function Chat() {
         onClose={() => setSidebar(false)}
       />
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Particelle confinate all'area principale → si allineano all'hero e si
+            riallineano da sole quando la sidebar si apre/chiude */}
+        <SoulParticles formText={empty && !sheet} modelName={modelName(model)} />
         {/* Top bar */}
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button

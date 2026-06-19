@@ -96,9 +96,12 @@ export default function SoulParticles({
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     let W = 0,
       H = 0;
+    // Dimensiona sul CONTENITORE (l'area principale), non sulla finestra: così le
+    // particelle vivono nello stesso spazio dell'hero e si riallineano al toggle sidebar.
     const resize = () => {
-      W = window.innerWidth;
-      H = window.innerHeight;
+      const host = canvas.parentElement;
+      W = host ? host.clientWidth : window.innerWidth;
+      H = host ? host.clientHeight : window.innerHeight;
       canvas.width = W * dpr;
       canvas.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -119,12 +122,9 @@ export default function SoulParticles({
       maxLife: 110 + Math.random() * 70,
     }));
 
-    // Centro dove si compone la parola: tiene conto della sidebar su desktop.
-    const wordCenter = () => {
-      const desktop = W >= 768;
-      const sidebar = desktop ? 268 : 0;
-      return { cx: sidebar + (W - sidebar) / 2, cy: Math.max(150, H * 0.28) };
-    };
+    // Il canvas È già l'area principale → basta centrare a metà; si riallinea da solo
+    // quando la sidebar cambia (ResizeObserver sotto).
+    const wordCenter = () => ({ cx: W / 2, cy: Math.max(150, H * 0.28) });
 
     // Campiona i pixel di una parola → lista di target (coord viewport).
     const sampleWord = (word: string): { x: number; y: number }[] => {
@@ -307,10 +307,19 @@ export default function SoulParticles({
     };
     document.addEventListener("visibilitychange", onVis);
 
-    window.addEventListener("resize", resize);
+    // Riallinea su resize finestra E su cambio dimensione del contenitore
+    // (apertura/chiusura sidebar): ridimensiona e ricompone la parola al centro.
+    const onResize = () => {
+      resize();
+      if (formRef.current) assignWord();
+    };
+    window.addEventListener("resize", onResize);
+    const ro = new ResizeObserver(onResize);
+    if (canvas.parentElement) ro.observe(canvas.parentElement);
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", onResize);
+      ro.disconnect();
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
@@ -319,7 +328,7 @@ export default function SoulParticles({
     <canvas
       ref={canvasRef}
       aria-hidden
-      className="pointer-events-none fixed inset-0"
+      className="pointer-events-none absolute inset-0"
       style={{ width: "100%", height: "100%", zIndex: 0, mixBlendMode: "screen" }}
     />
   );
