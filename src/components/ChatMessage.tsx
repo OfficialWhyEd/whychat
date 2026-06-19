@@ -5,6 +5,7 @@ import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
 import { ShiningText } from "./ShiningText";
 import { WLoader } from "./WLoader";
+import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
 
 export interface Message {
   id: string;
@@ -92,6 +93,10 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
             {msg.streaming && <span className="caret" />}
           </>
         )}
+
+        {/* link YouTube → player ottimizzato direttamente in chat */}
+        {!msg.streaming &&
+          extractYouTubeIds(msg.content).map((vid) => <YouTubeEmbed key={vid} id={vid} />)}
 
         {/* azioni sotto la risposta (solo a risposta completa) */}
         {!msg.streaming && msg.content && (
