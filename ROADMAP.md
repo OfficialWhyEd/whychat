@@ -35,6 +35,18 @@ Da fare:
 - [ ] **Simbolo modalità accanto a ogni conversazione** in sidebar + ogni chat ricorda la sua modalità (continua in quella).
 - [ ] Aggiungere **poco poco** di effetto scie che seguono il mouse (sobrio, colori brand, poche scie).
 
+## 🆕 NUOVA LISTA (19/06 — componenti 21st.dev da integrare in modo intelligente)
+Salvata per non perderla. Da fare dopo aver chiuso il goal stabilità.
+1. **Loading figo** — `DotLoader` (griglia 7×7 di puntini che animano frame/pattern). Per i caricamenti.
+2. **Ricerca online** — capacità di web search (usare webkimi o sistemi locali tipo openclaw). + input `AiInput` con toggle Search/web. IMPORTANTE: utenti che entrano possono implementare PER SÉ skill/plugin/connettori/MCP/CLI.
+3. **Badge in basso a sinistra** — `AwardBadge` (stile Product Hunt olografico, hover 3D) → "certificato/protocollo" con la **W di WhyChat**.
+4. **Video YouTube in chat** — `HeroVideoDialog` (thumbnail + modale iframe ottimizzato, veloce).
+5. **Reasoning shimmer** — `TextShimmer` (shimmer-text) indispensabile mentre l'agente ragiona. (ora c'è ShiningText, valutare swap).
+5b. **Bordi dinamici** — `GlowCard`/spotlight-card: i box più importanti hanno bordi particolari che reagiscono al puntatore.
+6. **Ragionamento + PLANNING** — `AgentPlanning`: mostrare ragionamento E planning con TUTTI i bash/tool step (come openclaw su Telegram), impeccabile. (planning ancora da costruire davvero).
+7. **Nuova modalità WhyEarth** — `RotatingEarth` (d3, globo a puntini): mondo al centro, interattivo; es. "dove si producono più manghi?" → deep thinking → puntini sul globo. (dep: d3)
+8. **Mascotte/logo 3D** — `InteractiveRobotSpline` (Spline): mascot fluttuante e personalizzato. (dep: @splinetool/react-spline)
+
 ## Decisioni prese
 - Modalità = "Group Prediction" (motore di predizione).
 - 11 agenti, incluso Anima (coscienza di WhyEd).
