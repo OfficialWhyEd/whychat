@@ -258,8 +258,19 @@ function Chat() {
                 <Hero onPick={send} />
               ) : (
                 <div className="flex flex-col gap-6">
-                  {messages.map((m) => (
-                    <ChatMessage key={m.id} msg={m} />
+                  {messages.map((m, i) => (
+                    <ChatMessage
+                      key={m.id}
+                      msg={m}
+                      onRetry={
+                        m.role === "assistant" && !streaming
+                          ? () => {
+                              const prevUser = [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
+                              if (prevUser) send(prevUser.content);
+                            }
+                          : undefined
+                      }
+                    />
                   ))}
                 </div>
               )}
