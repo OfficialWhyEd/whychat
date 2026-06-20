@@ -6,7 +6,7 @@ import { Typewriter } from "./Typewriter";
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy";
 
 interface ModeDef {
   id: Mode;
@@ -47,6 +47,13 @@ export const MODES: ModeDef[] = [
     desc: "Il mondo al centro, interattivo",
     tag: "beta",
     icon: I("M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", <circle cx="12" cy="12" r="9" />),
+  },
+  {
+    id: "entropy",
+    label: "WhyEntropy",
+    desc: "Ordine geometrico che si dissolve in caos",
+    tag: "beta",
+    icon: I("M12 3 21 19 3 19Z", <circle cx="12" cy="13.5" r="1.5" />),
   },
 ];
 
@@ -278,34 +285,36 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               }`}
               overlay={
                 <>
-                  {/* bande metalliche morbide (soft-light, lente): anisotropia senza effetto spinner */}
-                  <motion.span
+                  {/* metallo spazzolato: micro-righe parallele STATICHE (niente rotazione = niente radar) */}
+                  <span
                     aria-hidden
-                    className="pointer-events-none absolute -inset-1/2 mix-blend-soft-light"
+                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-soft-light"
                     style={{
                       background:
-                        "conic-gradient(from 0deg at 50% 50%, rgba(255,242,224,0), rgba(255,242,224,0.85), rgba(120,42,22,0.55), rgba(255,226,192,0.7), rgba(120,42,22,0.45), rgba(255,242,224,0))",
-                      opacity: 0.5,
+                        "repeating-linear-gradient(118deg, rgba(255,238,214,0.12) 0px, rgba(120,42,22,0.12) 1.6px, rgba(255,238,214,0.12) 3.2px)",
+                      opacity: 0.55,
                     }}
-                    animate={reduce ? undefined : { rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 14, ease: "linear" }}
                   />
-                  {/* glint: un lampo stretto che gira sul metallo (light che lo accarezza) */}
+                  {/* riflesso liquido che VAGA: hotspot morbido, moto Lissajous (x e y a frequenze
+                      diverse) → il metallo "respira" la luce, non la spazza in cerchio */}
                   <motion.span
                     aria-hidden
-                    className="pointer-events-none absolute -inset-1/2 mix-blend-screen"
+                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-screen"
                     style={{
                       background:
-                        "conic-gradient(from 0deg at 50% 50%, transparent 0deg, transparent 64deg, rgba(255,249,237,0.8) 82deg, transparent 100deg, transparent 360deg)",
+                        "radial-gradient(36% 28% at 50% 40%, rgba(255,248,236,0.85), rgba(255,210,170,0.18) 55%, transparent 72%)",
                     }}
-                    animate={reduce ? undefined : { rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 7, ease: "linear" }}
+                    animate={reduce ? undefined : { x: [-5, 6, -5], y: [-4, 4, -4] }}
+                    transition={{
+                      x: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
+                      y: { duration: 7.5, repeat: Infinity, ease: "easeInOut" },
+                    }}
                   />
-                  {/* specular fisso alto-sinistra: curvatura lucida del metallo */}
+                  {/* specular fisso alto-sinistra: la sorgente di luce, dà la curvatura */}
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-0 rounded-full"
-                    style={{ zIndex: 1, background: "radial-gradient(44% 34% at 37% 19%, rgba(255,250,242,0.72), transparent 64%)" }}
+                    style={{ zIndex: 1, background: "radial-gradient(38% 30% at 35% 18%, rgba(255,250,242,0.72), transparent 60%)" }}
                   />
                   {/* fresnel rim + bevel: highlight ambra in alto, ombra calda sotto */}
                   <span

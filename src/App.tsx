@@ -4,6 +4,7 @@ import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
 import GroupChat from "./components/GroupChat";
 import WhyEarth from "./components/WhyEarth";
+import WhyEntropy from "./components/WhyEntropy";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
@@ -66,6 +67,7 @@ function Chat() {
   const sheet = mode === "sheet";
   const group = mode === "group";
   const earth = mode === "earth";
+  const entropy = mode === "entropy";
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
@@ -309,6 +311,10 @@ function Chat() {
           <main className="min-h-0 flex-1">
             <WhyEarth />
           </main>
+        ) : entropy ? (
+          <main className="min-h-0 flex-1">
+            <WhyEntropy />
+          </main>
         ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
             <div className="mx-auto h-full max-w-4xl">
@@ -347,7 +353,7 @@ function Chat() {
         <footer className={`px-4 pb-4 pt-2 ${group ? "hidden" : ""}`}>
           <div className="relative mx-auto max-w-2xl">
             <AnimatePresence>
-              {!atBottom && !empty && !sheet && !earth && (
+              {!atBottom && !empty && !sheet && !earth && !entropy && (
                 <JumpToBottom
                   key="jump"
                   live={streaming}
@@ -395,6 +401,7 @@ const MODE_SHORT: Record<Mode, string> = {
   sheet: "onlytype",
   group: "gruppo",
   earth: "earth",
+  entropy: "entropy",
 };
 const modeIcon = (m: Mode) => MODES.find((x) => x.id === m)?.icon ?? null;
 
