@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
@@ -15,7 +15,11 @@ import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
+import type { MapPin } from "./components/WhyEarthLive";
+const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
+// estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
+const LUOGO_RE = /\[\[\s*LUOGO\s*:\s*([^\]]+?)\s*\]\]/i;
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
@@ -74,6 +78,27 @@ function Chat() {
   const group = mode === "group";
   const earth = mode === "earth";
   const entropy = mode === "entropy";
+
+  // WhyEarth: vista "Globo" (d3 a puntini, default) o "Mappa viva" (MapLibre).
+  // Il sogno: quando la chat nomina un luogo, vola lì e pianta il pin.
+  const [earthLive, setEarthLive] = useState(false);
+  const [mapPin, setMapPin] = useState<MapPin | null>(null);
+  const lastGeoRef = useRef("");
+  // testo dell'ultimo messaggio assistant (per estrarre [[LUOGO:]] a stream finito)
+  const lastBotEarth = earth ? [...messages].reverse().find((m) => m.role === "assistant" && !m.streaming)?.content ?? "" : "";
+  useEffect(() => {
+    if (!earth) return;
+    const mm = LUOGO_RE.exec(lastBotEarth);
+    const place = mm?.[1]?.trim();
+    if (!place || place === lastGeoRef.current) return;
+    lastGeoRef.current = place;
+    geocodePlace(place).then((pin) => {
+      if (pin) {
+        setMapPin(pin);
+        setEarthLive(true); // vola sulla mappa viva quando WhyChat punta un luogo
+      }
+    });
+  }, [earth, lastBotEarth]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
@@ -397,8 +422,37 @@ function Chat() {
           <main className="relative min-h-0 flex-1 overflow-hidden">
             {/* il visivo (globo / geometria) resta protagonista, sullo sfondo */}
             <div className="absolute inset-0">
-              {earth ? <WhyEarth onExit={() => setMode("chat")} /> : <WhyEntropy onExit={() => setMode("chat")} />}
+              {earth ? (
+                earthLive ? (
+                  <Suspense
+                    fallback={<div className="mono grid h-full place-items-center text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
+                  >
+                    <WhyEarthLive focus={mapPin} onExit={() => setMode("chat")} />
+                  </Suspense>
+                ) : (
+                  <WhyEarth onExit={() => setMode("chat")} />
+                )
+              ) : (
+                <WhyEntropy onExit={() => setMode("chat")} />
+              )}
             </div>
+            {/* toggle vista: Globo a puntini (default) ↔ Mappa viva (vola+pin) */}
+            {earth && (
+              <div className="absolute right-4 top-16 z-10 flex overflow-hidden rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] text-[0.5rem] backdrop-blur">
+                <button
+                  onClick={() => setEarthLive(false)}
+                  className={`mono px-2.5 py-1 transition ${!earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
+                >
+                  GLOBO
+                </button>
+                <button
+                  onClick={() => setEarthLive(true)}
+                  className={`mono px-2.5 py-1 transition ${earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
+                >
+                  MAPPA VIVA
+                </button>
+              </div>
+            )}
             {/* la conversazione galleggia sopra: il mondo resta visibile, le risposte appaiono */}
             {!empty && (
               <div className="scroll-thin pointer-events-none absolute inset-x-0 bottom-0 top-1/3 flex flex-col justify-end overflow-y-auto">
@@ -409,7 +463,7 @@ function Chat() {
                       className="pointer-events-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.74)] backdrop-blur-md"
                     >
                       <ChatMessage
-                        msg={m}
+                        msg={earth ? { ...m, content: m.content.replace(LUOGO_RE, "").trimEnd() } : m}
                         onRetry={
                           m.role === "assistant" && !streaming
                             ? () => {
