@@ -8,7 +8,7 @@ import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
-import OriginButton from "./components/OriginButton";
+import { motion } from "framer-motion";
 import Sidebar from "./components/Sidebar";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
@@ -73,13 +73,15 @@ function Chat() {
   const send = async (text: string, modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
-    // un'apertura legata a una modalità avvia (e fa continuare) la chat in quella modalità
-    const useMode = modeOverride ?? mode;
-    if (modeOverride && modeOverride !== mode) setMode(modeOverride);
+    const existing = chats.find((c) => c.id === activeId);
+    // Una chat è LEGATA alla modalità in cui è nata: i messaggi successivi
+    // restano in quella modalità anche se il menu globale è cambiato. Solo
+    // un'apertura (modeOverride) o una chat nuova usano la modalità scelta ora.
+    const useMode: Mode = modeOverride ?? (existing ? existing.mode ?? "chat" : mode);
+    if (useMode !== mode) setMode(useMode);
     const userMsg: Message = { id: uid(), role: "user", content: text };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
-    const existing = chats.find((c) => c.id === activeId);
     const baseMessages = existing?.messages ?? [];
     let id = activeId;
     let nextChats: Chat[];
@@ -211,6 +213,16 @@ function Chat() {
     saveChats(next);
     if (cid === activeId) setActiveId(null);
   };
+  // Cambiare modalità mentre una chat è in corso NON la tocca (resta legata alla
+  // sua): apre una nuova conversazione nella modalità scelta, come Claude/ChatGPT.
+  // A chat vuota imposta soltanto la modalità di partenza.
+  const changeMode = (m: Mode) => {
+    setMode(m);
+    if (active && active.messages.length > 0 && m !== (active.mode ?? "chat")) {
+      setActiveId(null);
+      setError("");
+    }
+  };
   const askName = () => {
     const n = window.prompt("Come ti chiami? (lo userà WhyChat, e arriva a Edoardo)", name);
     if (n !== null) {
@@ -311,7 +323,7 @@ function Chat() {
               onSend={send}
               disabled={busy}
               mode={mode}
-              onMode={setMode}
+              onMode={changeMode}
               onStop={stop}
               streaming={busy}
               search={webSearch}
@@ -319,7 +331,7 @@ function Chat() {
             />
             <p className="mt-2 text-center text-[0.6rem] text-faint">
               WhyChat · {modelName(model)} · le conversazioni possono essere conservate per farlo
-              crescere — non scrivere dati sensibili.
+              crescere. Niente dati sensibili.
             </p>
           </div>
         </footer>
@@ -354,7 +366,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
       <div style={{ height: "clamp(170px, 28vh, 260px)" }} />
 
-      <p className="max-w-sm text-balance px-3 text-[1rem] font-light leading-relaxed text-dim sm:px-0 sm:text-[1.05rem]">
+      <p className="max-w-md text-balance px-3 text-[1.08rem] leading-relaxed text-paper/90 sm:px-0 sm:text-[1.18rem]">
         L'anima digitale di WhyEd: la sua coscienza, il suo modo di{" "}
         <AnimatedTextCycle
           words={["pensare", "creare", "scrivere", "comporre", "immaginare"]}
@@ -364,27 +376,45 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
         .<span className="serif-i text-paper"> Parlami.</span>
       </p>
 
-      <div className="mt-3 h-px w-10 bg-gradient-to-r from-transparent via-signal/50 to-transparent" />
+      <div className="mt-4 h-px w-12 bg-gradient-to-r from-transparent via-signal/50 to-transparent" />
 
-      {/* aperture — simmetriche, sempre diverse, per lo più legate alle modalità */}
-      <div className="mt-8 grid w-full max-w-xl grid-cols-1 items-stretch gap-2 sm:grid-cols-2">
-        {openers.map((o) => (
-          <OriginButton
+      {/* aperture — lista editoriale (niente griglia di card), legate alle modalità */}
+      <ul className="mt-9 w-full max-w-md text-left">
+        {openers.map((o, i) => (
+          <motion.li
             key={o.text}
-            onClick={() => onPick(o.text, o.mode)}
-            fill="rgba(201,75,37,0.18)"
-            className="group h-full rounded-xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.55)] px-3.5 py-3 text-[0.85rem] text-dim backdrop-blur-md transition-colors duration-200 hover:border-signal/40 hover:bg-[rgba(22,17,14,0.7)] hover:text-paper"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 + i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           >
-            <span className="shrink-0 text-faint transition-colors group-hover:text-signal" aria-hidden>
-              {modeIcon(o.mode)}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-left">{o.text}</span>
-            <span className="mono shrink-0 text-[0.46rem] uppercase text-faint/70 transition-colors group-hover:text-ember">
-              {MODE_SHORT[o.mode]}
-            </span>
-          </OriginButton>
+            <button
+              onClick={() => onPick(o.text, o.mode)}
+              className="group flex w-full items-center gap-3 border-t border-[var(--color-line)] py-3.5 last:border-b"
+            >
+              <span
+                className="grid h-6 w-6 shrink-0 place-items-center text-faint transition-colors duration-200 group-hover:text-signal [&_svg]:h-[18px] [&_svg]:w-[18px]"
+                aria-hidden
+              >
+                {modeIcon(o.mode)}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[0.92rem] text-dim transition-colors duration-200 group-hover:text-paper">
+                {o.text}
+              </span>
+              <span className="mono shrink-0 text-[0.5rem] uppercase tracking-wider text-faint/60 transition-colors duration-200 group-hover:text-ember">
+                {MODE_SHORT[o.mode]}
+              </span>
+              <span
+                className="shrink-0 -translate-x-1 text-faint opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-signal group-hover:opacity-100"
+                aria-hidden
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
+          </motion.li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
