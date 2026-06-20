@@ -354,6 +354,28 @@ async function liveSearch(query: string): Promise<string> {
   return out.join("\n").slice(0, 1600);
 }
 
+// Contesto temporale: WhyChat sa SEMPRE che ora/giorno è davvero (Europe/Rome).
+// Iniettato a ogni richiesta → ancorato al presente reale, non al training.
+function nowContext(): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("it-IT", {
+      timeZone: "Europe/Rome",
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+    return `\n\n[ADESSO È: ${fmt.format(new Date())} (ora italiana, Europe/Rome). Sei ancorato al presente reale: se ti chiedono che ora è, che giorno è o la data, rispondi da qui con certezza — è l'ora vera, non una stima.]`;
+  } catch {
+    return `\n\n[ADESSO È (UTC): ${new Date().toISOString().slice(0, 16).replace("T", " ")}. Sei ancorato al presente reale.]`;
+  }
+}
+
+// Euristica: la domanda chiede info fresche / dal mondo? → cerca da solo,
+// anche senza che l'utente attivi il toggle (tool use intelligente).
+function needsLiveInfo(text: string): boolean {
+  const t = text.toLowerCase();
+  return /(\boggi\b|\badesso\b|attual|ultim|recent|stamattin|staser|\bieri\b|\bdomani\b|\bnews\b|notizi|che ora|che giorno|in tempo reale|\blive\b|meteo|prevision|\bprezzo\b|quotazion|\bborsa\b|bitcoin|\bcambio\b|chi è |chi e' |presidente|primo ministro|vincit|risultat|classific|\buscit|appena|\b202[4-9]\b|latest|current|today|right now)/.test(t);
+}
+
 async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
   if (req.headers.get("Access-Control-Allow-Origin") === "null") {
@@ -376,12 +398,13 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-  // ricerca web (toggle utente): inietta risultati ONLINE reali nel contesto
-  const webCtx = body.search ? await liveSearch(lastUser) : "";
+  // ricerca web: toggle utente OPPURE auto se la domanda chiede info dal mondo
+  const webCtx = (body.search || needsLiveInfo(lastUser)) ? await liveSearch(lastUser) : "";
 
   const systemText =
     SOUL +
     BEHAVIOR +
+    nowContext() +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
     modeHint +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
@@ -622,8 +645,15 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
     parts: [{ text: m.content }],
   }));
 
+  // pensiero profondo connesso al mondo: ora reale + ricerca se serve
+  const webCtx = needsLiveInfo(lastUser) ? await liveSearch(lastUser) : "";
+  const thinkSystem =
+    SOUL + BEHAVIOR + nowContext() +
+    (name ? `\n\n[Parli con: ${name}]` : "") +
+    (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— ragiona su questi fatti reali, citali con naturalezza; non inventare.]` : "");
+
   const payloadBase = {
-    systemInstruction: { parts: [{ text: SOUL + BEHAVIOR + (name ? `\n\n[Parli con: ${name}]` : "") }] },
+    systemInstruction: { parts: [{ text: thinkSystem }] },
     contents,
     generationConfig: {
       temperature: 0.9,
