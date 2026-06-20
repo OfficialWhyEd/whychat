@@ -145,6 +145,26 @@ export async function seeSheet(
   }
 }
 
+/** Geocoding keyless (open-meteo): nome luogo → coordinate, per piantare il pin su WhyEarth. */
+export async function geocodePlace(name: string): Promise<{ lng: number; lat: number; name: string } | null> {
+  const q = name.trim();
+  if (!q) return null;
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=it&format=json`,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as {
+      results?: { latitude: number; longitude: number; name: string; country?: string }[];
+    };
+    const r = d.results?.[0];
+    if (!r) return null;
+    return { lng: r.longitude, lat: r.latitude, name: r.country ? `${r.name}, ${r.country}` : r.name };
+  } catch {
+    return null;
+  }
+}
+
 export interface Dream {
   date: string;
   ts: string;
