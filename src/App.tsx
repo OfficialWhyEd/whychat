@@ -329,9 +329,9 @@ function Chat() {
               search={webSearch}
               onToggleSearch={() => setWebSearch((s) => !s)}
             />
-            <p className="mt-2 text-center text-[0.6rem] text-faint">
-              WhyChat · {modelName(model)} · le conversazioni possono essere conservate per farlo
-              crescere. Niente dati sensibili.
+            <p className="mx-auto mt-2.5 max-w-md text-center text-[0.6rem] leading-relaxed text-faint">
+              <span className="text-dim/70">{modelName(model)}</span> · le conversazioni possono
+              essere conservate per farlo crescere. Niente dati sensibili.
             </p>
           </div>
         </footer>

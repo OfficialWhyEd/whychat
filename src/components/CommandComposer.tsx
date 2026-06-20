@@ -82,6 +82,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
+  const armed = value.trim().length > 0 && !disabled;
 
   useEffect(() => {
     const el = ref.current;
@@ -155,7 +157,13 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       </AnimatePresence>
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
-      <div className="glass glass-sheen rounded-[26px] px-3.5 pb-2.5 pt-3 transition-all duration-300 focus-within:shadow-[0_0_28px_-8px_rgba(201,75,37,0.55)] focus-within:ring-1 focus-within:ring-signal/30">
+      <div
+        className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
+          armed
+            ? "ring-signal/30 shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_32px_-9px_rgba(201,75,37,0.5)]"
+            : "ring-transparent focus-within:ring-signal/25 focus-within:shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_26px_-10px_rgba(201,75,37,0.42)]"
+        }`}
+      >
         {/* riga 1 — il testo */}
         <div className="relative px-0.5">
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
@@ -183,15 +191,17 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         </div>
 
         {/* riga 2 — i controlli, allineati e simmetrici */}
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2">
           {/* modalità → apre la palette */}
-          <button
+          <motion.button
             onClick={() => setMenu((s) => !s)}
             title="Scegli modalità"
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border pl-2.5 pr-2.5 text-[0.66rem] transition ${
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 420, damping: 16 }}
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[0.66rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
               mode === "chat"
                 ? "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
-                : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember"
+                : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]"
             }`}
           >
             <span className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</span>
@@ -202,7 +212,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             >
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             </motion.svg>
-          </button>
+          </motion.button>
 
           {/* tasto: cerca sul web (Wikipedia) — inietta risultati reali nel contesto */}
           {onToggleSearch && (
@@ -212,8 +222,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               title="Cerca sul web"
               whileTap={{ scale: 0.93 }}
               transition={{ type: "spring", stiffness: 420, damping: 16 }}
-              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 transition ${
-                search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
+                search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
               <motion.span animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
@@ -255,7 +265,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               disabled={disabled || !value.trim()}
               title="Invia"
               fill="#a73c1c"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full transition disabled:opacity-35"
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
+                armed ? "shadow-[0_0_20px_-4px_rgba(224,103,63,0.65)]" : ""
+              }`}
             >
               <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)", zIndex: -1 }} />
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
