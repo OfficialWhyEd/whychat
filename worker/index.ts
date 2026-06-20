@@ -15,12 +15,14 @@ import { SOUL, WHYCHAT_DREAM } from "./persona";
 
 export interface Env {
   GROQ_API_KEY: string;
+  GROQ_API_KEY_2?: string; // seconda chiave Groq: raddoppia la quota giornaliera di token
   GEMINI_API_KEY: string;
   GEMINI_API_KEY_2?: string; // chiave Gemini di riserva: se la prima fallisce/è a quota, si usa questa
   ADMIN_TOKEN: string;
   MEMORY?: KVNamespace; // opzionale: se assente, memoria/vault/sogni sono disattivati ma chat+think funzionano
   ALLOWED_ORIGINS?: string; // CSV, es. "https://officialwhyed.github.io,http://localhost:5173"
   GROQ_MODEL?: string;
+  GROQ_MODELS?: string; // CSV catena di fallback Groq; se assente si usa DEFAULT_GROQ_MODELS
   GEMINI_MODEL?: string; // override singolo (legacy); se assente si usa la catena GEMINI_MODELS
   GEMINI_MODELS?: string; // CSV catena di fallback, dal più recente in giù
 }
@@ -73,35 +75,44 @@ async function groqChat(
   user: string,
   opts: { temperature?: number; maxTokens?: number; json?: boolean } = {},
 ): Promise<string> {
-  try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
-        temperature: opts.temperature ?? 0.8,
-        max_tokens: opts.maxTokens ?? 300,
-        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
+  // Prova ogni modello Groq (dal migliore) × ogni chiave, finché uno risponde
+  // bene. Un 429/5xx/404 o un moncone (taglio da budget) → si passa alla
+  // combinazione successiva. Esaurito tutto Groq, subentra Gemini.
+  const payload = (model: string) =>
+    JSON.stringify({
+      model,
+      temperature: opts.temperature ?? 0.8,
+      max_tokens: opts.maxTokens ?? 300,
+      ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     });
-    if (!res.ok) throw new Error(`groq ${res.status}`);
-    const j = (await res.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
-    const content = j.choices?.[0]?.message?.content ?? "";
-    const finish = j.choices?.[0]?.finish_reason;
-    // Col limite giornaliero quasi esaurito Groq risponde 200 ma TRONCA la
-    // generazione (finish_reason "length" a pochi token, o vuoto): lo scartiamo
-    // e passiamo a Gemini, così l'agente dice una frase intera, non un moncone.
-    // Per le battute (non-JSON) un moncone < 24 caratteri = taglio da budget: scarto.
-    const tooShort = !opts.json && content.trim().length < 24;
-    if (!content.trim() || tooShort || (finish && finish !== "stop"))
-      throw new Error(`groq troncato (${finish ?? "vuoto"})`);
-    return content;
-  } catch {
-    // Fallback su Gemini: stessa richiesta, catena modelli × 2 chiavi.
+  for (const model of groqModels(env, env.GROQ_MODEL || DEFAULT_GROQ_MODEL)) {
+    for (const key of groqKeys(env)) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: payload(model),
+        });
+        if (!res.ok) continue; // 429/5xx/404 → prossima combinazione
+        const j = (await res.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+        const content = j.choices?.[0]?.message?.content ?? "";
+        const finish = j.choices?.[0]?.finish_reason;
+        // Col limite quasi esaurito Groq risponde 200 ma TRONCA (finish "length"
+        // a pochi token, o vuoto): per le battute un moncone < 24 char = taglio.
+        const tooShort = !opts.json && content.trim().length < 24;
+        if (!content.trim() || tooShort || (finish && finish !== "stop")) continue;
+        return content;
+      } catch {
+        // errore di rete su questa combinazione → prova la prossima
+      }
+    }
+  }
+  {
+    // Tutto Groq esaurito → Gemini: stessa richiesta, catena modelli × 2 chiavi.
     const data = await geminiGenerate(env, {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
@@ -124,6 +135,29 @@ async function groqChat(
 
 // ── Config ───────────────────────────────────────────────────────────────────
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+// Catena Groq: il modello scelto va per primo, poi a scendere tutti gli altri
+// disponibili. Ogni modello ha la SUA quota giornaliera → insieme durano molto
+// di più. Provata × tutte le chiavi Groq disponibili (la 2ª raddoppia i token).
+const DEFAULT_GROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3-32b",
+];
+
+/** Le chiavi Groq disponibili, in ordine (la 2ª raddoppia la quota). */
+function groqKeys(env: Env): string[] {
+  return [env.GROQ_API_KEY, env.GROQ_API_KEY_2].filter(Boolean) as string[];
+}
+
+/** La catena di modelli Groq da provare: 'selected' per primo, poi gli altri. */
+function groqModels(env: Env, selected?: string): string[] {
+  const csv = (env.GROQ_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const chain = csv.length ? csv : DEFAULT_GROQ_MODELS;
+  const ordered = selected ? [selected, ...chain] : chain;
+  return [...new Set(ordered)];
+}
 // Catena Gemini: SEMPRE il più recente per primo (flash + flash-latest), poi a
 // scendere tutti gli altri come rete di sicurezza. Provata × tutte le chiavi
 // disponibili finché una risponde → una risposta arriva sempre.
@@ -350,27 +384,40 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     modeHint +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
 
-  const payload = {
-    model: groqModel,
-    stream: true,
-    temperature: 0.85,
-    max_tokens: 2048,
-    messages: [{ role: "system", content: systemText }, ...messages],
-  };
+  const payload = (model: string) =>
+    JSON.stringify({
+      model,
+      stream: true,
+      temperature: 0.85,
+      max_tokens: 2048,
+      messages: [{ role: "system", content: systemText }, ...messages],
+    });
 
-  const upstream = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  // Prova il modello scelto, poi a scendere tutta la catena Groq × ogni chiave,
+  // finché uno apre lo stream. Ogni modello ha quota propria → dura molto di più.
+  let upstream: Response | null = null;
+  outer: for (const model of groqModels(env, groqModel)) {
+    for (const key of groqKeys(env)) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: payload(model),
+        });
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+      } catch {
+        // errore di rete su questa combinazione → prova la prossima
+      }
+    }
+  }
 
-  // Se Groq è a quota (429) o giù (5xx) NON moriamo: ripieghiamo su Gemini in
+  // Esaurito tutto Groq (quota o giù) NON moriamo: ripieghiamo su Gemini in
   // streaming, riconvertito nel formato SSE che il client già legge. Così
-  // chat/canvas/apprendimento restano vivi anche col limite giornaliero Groq.
-  if (!upstream.ok || !upstream.body) {
+  // chat/canvas/apprendimento restano vivi sempre.
+  if (!upstream || !upstream.body) {
     return streamGeminiChat(req, env, ctx, messages, systemText, visitorId, name, lastUser, cors);
   }
 

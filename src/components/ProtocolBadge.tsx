@@ -17,7 +17,7 @@ const SPECS: { title: string; note?: string; items: { k: string; v: string }[] }
       { k: "WhyChat 5.5", v: "Llama 3.3 70B su Groq, in streaming" },
       { k: "Terry 4.2", v: "Llama 3.1 8B su Groq, veloce" },
       { k: "Deep thinking", v: "Gemini 2.5, ragionamento nativo dal vivo" },
-      { k: "Resilienza", v: "catena Gemini a 6 modelli × 2 chiavi" },
+      { k: "Resilienza", v: "5 modelli Groq × 2 chiavi, poi 6 Gemini" },
     ],
   },
   {
