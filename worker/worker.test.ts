@@ -205,14 +205,17 @@ describe("Cloudflare Worker", () => {
   });
 
   describe("Flights endpoint", () => {
-    it("should fetch flight data and filter military flights", async () => {
+    it("should fetch real flight data from OpenSky (positions + live)", async () => {
+      // formato OpenSky /states/all: array per stato, indici fissi
+      // [icao24, callsign, country, t_pos, last, lon(5), lat(6), alt, on_ground(8), vel(9), track(10), ...]
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          ac: [
-            { lat: 45.1, lon: 9.2 },
-            { lat: 40.5, lon: 15.3 },
-            { lat: null, lon: 12.0 },
+          states: [
+            ["abc", "AZA123 ", "Italy", 0, 0, 9.2, 45.1, 9000, false, 230, 90, 0],
+            ["def", "DLH456 ", "Germany", 0, 0, 15.3, 40.5, 11000, false, 250, 180, 0],
+            ["ghi", "GRD789 ", "Spain", 0, 0, 12.0, 41.0, 0, true, 0, 0, 0], // a terra → escluso
+            ["jkl", "NUL000 ", "x", 0, 0, null, 12.0, 0, false, 0, 0, 0], // senza lon → escluso
           ],
         }),
       });
@@ -225,6 +228,8 @@ describe("Cloudflare Worker", () => {
         [9.2, 45.1],
         [15.3, 40.5],
       ]);
+      expect(data.live).toHaveLength(2);
+      expect(data.live[0]).toMatchObject({ lon: 9.2, lat: 45.1, dir: 90, spd: 230, call: "AZA123" });
     });
   });
 });

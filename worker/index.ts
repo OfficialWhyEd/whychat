@@ -1026,20 +1026,36 @@ Concreto, niente disclaimer inutili.`;
 async function handleFlights(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
   try {
-    // adsb.lol: aviazione live keyless. /v2/mil = aerei militari globali (set reale).
-    const upstream = await fetch("https://api.adsb.lol/v2/mil", {
+    // OpenSky: stati aerei reali e GLOBALI, keyless. adsb.lol faceva 429 sull'IP
+    // datacenter del Worker (voli sbagliati). Cache edge 25s → niente rate-limit.
+    const init = {
       headers: { "User-Agent": "WhyChat/1.0 (whyed)", Accept: "application/json" },
-    });
-    if (!upstream.ok) throw new Error(`adsb ${upstream.status}`);
-    const data = (await upstream.json()) as { ac?: { lat?: number; lon?: number }[] };
+      cf: { cacheTtl: 25, cacheEverything: true },
+    };
+    const upstream = await fetch("https://opensky-network.org/api/states/all", init as RequestInit);
+    if (!upstream.ok) throw new Error(`opensky ${upstream.status}`);
+    const data = (await upstream.json()) as { states?: (string | number | boolean | null)[][] };
+    // formato legacy [lon,lat] per il globo d3 + 'live' (rotta/velocità) per gli aerei animati
     const flights: [number, number][] = [];
-    for (const a of data.ac ?? []) {
-      if (typeof a.lon === "number" && typeof a.lat === "number") {
-        flights.push([Math.round(a.lon * 100) / 100, Math.round(a.lat * 100) / 100]);
-        if (flights.length >= 4000) break;
+    const live: { lon: number; lat: number; dir: number; spd: number; call: string }[] = [];
+    for (const s of data.states ?? []) {
+      const lon = s[5];
+      const lat = s[6];
+      const onGround = s[8] === true;
+      if (typeof lon !== "number" || typeof lat !== "number" || onGround) continue;
+      flights.push([Math.round(lon * 100) / 100, Math.round(lat * 100) / 100]);
+      if (live.length < 1500) {
+        live.push({
+          lon,
+          lat,
+          dir: typeof s[10] === "number" ? s[10] : 0, // true_track (prua)
+          spd: typeof s[9] === "number" ? s[9] : 0, // velocity m/s
+          call: String(s[1] ?? "").trim(),
+        });
       }
+      if (flights.length >= 4000) break;
     }
-    return json({ flights }, 200, { ...cors, "Cache-Control": "public, max-age=20" });
+    return json({ flights, live }, 200, { ...cors, "Cache-Control": "public, max-age=20" });
   } catch (e) {
     return json({ error: "voli non disponibili", detail: String(e).slice(0, 120) }, 502, cors);
   }
