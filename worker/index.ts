@@ -89,8 +89,17 @@ async function groqChat(
       }),
     });
     if (!res.ok) throw new Error(`groq ${res.status}`);
-    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return j.choices?.[0]?.message?.content ?? "";
+    const j = (await res.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+    const content = j.choices?.[0]?.message?.content ?? "";
+    const finish = j.choices?.[0]?.finish_reason;
+    // Col limite giornaliero quasi esaurito Groq risponde 200 ma TRONCA la
+    // generazione (finish_reason "length" a pochi token, o vuoto): lo scartiamo
+    // e passiamo a Gemini, così l'agente dice una frase intera, non un moncone.
+    // Per le battute (non-JSON) un moncone < 24 caratteri = taglio da budget: scarto.
+    const tooShort = !opts.json && content.trim().length < 24;
+    if (!content.trim() || tooShort || (finish && finish !== "stop"))
+      throw new Error(`groq troncato (${finish ?? "vuoto"})`);
+    return content;
   } catch {
     // Fallback su Gemini: stessa richiesta, catena modelli × 2 chiavi.
     const data = await geminiGenerate(env, {
@@ -99,6 +108,10 @@ async function groqChat(
       generationConfig: {
         temperature: opts.temperature ?? 0.8,
         maxOutputTokens: opts.maxTokens ?? 300,
+        // Spengo il "thinking" di Gemini 2.5: su chiamate brevi (agente, regista)
+        // si mangerebbe tutto il budget di token lasciando un moncone. Qui serve
+        // la risposta diretta, non il ragionamento.
+        thinkingConfig: { thinkingBudget: 0 },
         ...(opts.json ? { responseMimeType: "application/json" } : {}),
       },
     });
@@ -238,23 +251,72 @@ async function logTurn(
 // ── /api/chat — Groq streaming (SSE) con tee verso la memoria ─────────────────
 // Ricerca web keyless e affidabile: Wikipedia (IT). Restituisce risultati reali
 // da iniettare nel contesto, così WhyChat risponde su fatti veri invece di inventare.
-async function webSearch(query: string): Promise<string> {
-  if (!query.trim()) return "";
+/** Estrae il primo oggetto JSON da un testo (regge preamboli/fence dei modelli). */
+function extractJson(s: string): string {
+  const a = s.indexOf("{");
+  const b = s.lastIndexOf("}");
+  return a >= 0 && b > a ? s.slice(a, b + 1) : s;
+}
+
+/** fetch JSON con timeout (non blocca mai a lungo una ricerca). */
+async function fetchJSON(url: string, ms = 6000, headers?: Record<string, string>): Promise<unknown | null> {
   try {
-    const url = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
-      query,
-    )}&format=json&srlimit=4&srprop=snippet`;
-    const res = await fetch(url, { headers: { "User-Agent": "WhyChat/1.0 (whyed)" } });
-    if (!res.ok) return "";
-    const d = (await res.json()) as { query?: { search?: { title: string; snippet: string }[] } };
-    const items = d.query?.search ?? [];
-    if (!items.length) return "";
-    return items
-      .map((x, i) => `[${i + 1}] ${x.title}: ${x.snippet.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").slice(0, 220)}`)
-      .join("\n");
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    const res = await fetch(url, { signal: ctrl.signal, headers });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    return await res.json();
   } catch {
-    return "";
+    return null;
   }
+}
+
+/**
+ * Ricerca ONLINE in tempo reale, keyless e multi-fonte (gira dai Workers):
+ *  - DuckDuckGo Instant Answer → definizione/abstract sintetico
+ *  - Wikipedia → grounding enciclopedico
+ *  - Hacker News (Algolia, ordinato per DATA) → notizie/discussioni recenti, con timestamp
+ * Le fonti girano in PARALLELO: se una è giù o lenta, le altre bastano comunque.
+ */
+async function liveSearch(query: string): Promise<string> {
+  const q = query.trim().slice(0, 200);
+  if (!q) return "";
+  const enc = encodeURIComponent(q);
+  const [wiki, ddg, hn] = await Promise.all([
+    fetchJSON(
+      `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${enc}&format=json&srlimit=3&srprop=snippet`,
+      6000,
+      { "User-Agent": "WhyChat/1.0 (whyed)" },
+    ) as Promise<{ query?: { search?: { title: string; snippet: string }[] } } | null>,
+    fetchJSON(`https://api.duckduckgo.com/?q=${enc}&format=json&no_html=1&t=whychat`) as Promise<{
+      AbstractText?: string;
+      Abstract?: string;
+    } | null>,
+    fetchJSON(`https://hn.algolia.com/api/v1/search_by_date?query=${enc}&tags=story&hitsPerPage=4`) as Promise<{
+      hits?: { title?: string; url?: string; created_at?: string }[];
+    } | null>,
+  ]);
+
+  const out: string[] = [];
+  const abstract = ddg?.AbstractText || ddg?.Abstract;
+  if (abstract) out.push(`Sintesi: ${String(abstract).slice(0, 280)}`);
+
+  const wikiItems = wiki?.query?.search ?? [];
+  if (wikiItems.length) {
+    out.push("Enciclopedia (Wikipedia):");
+    for (const x of wikiItems.slice(0, 3))
+      out.push(`- ${x.title}: ${x.snippet.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").slice(0, 170)}`);
+  }
+
+  const recent = (hn?.hits ?? []).filter((h) => h.title).slice(0, 4);
+  if (recent.length) {
+    out.push("Notizie/discussioni recenti (Hacker News, dal vivo):");
+    for (const h of recent)
+      out.push(`- [${(h.created_at ?? "").slice(0, 10)}] ${h.title}${h.url ? ` (${h.url})` : ""}`);
+  }
+
+  return out.join("\n").slice(0, 1600);
 }
 
 async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -279,14 +341,14 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-  // ricerca web (toggle utente): inietta risultati reali nel contesto
-  const webCtx = body.search ? await webSearch(lastUser) : "";
+  // ricerca web (toggle utente): inietta risultati ONLINE reali nel contesto
+  const webCtx = body.search ? await liveSearch(lastUser) : "";
 
   const systemText =
     SOUL +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
     modeHint +
-    (webCtx ? `\n\n[RISULTATI WEB (Wikipedia) per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
+    (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
 
   const payload = {
     model: groqModel,
@@ -629,13 +691,18 @@ ${directorRoster}
 Regole: scegli il più utile al momento; MAI lo stesso dell'ultimo turno (ultimo: "${lastSpeaker}"); "next"="agent" se serve un'altra voce, "user" se tocca all'utente, "done" se il cerchio si è chiuso.
 Rispondi SOLO JSON: {"agentId":"<id>","next":"agent|user|done"}`;
 
-  let route: { agentId?: string; next?: string };
+  let route: { agentId?: string; next?: string } = {};
   try {
-    route = JSON.parse(
-      await groqChat(env, directorSys, `Discussione:\n${transcript}\n\nDecidi (solo JSON).`, { temperature: 0.4, maxTokens: 60, json: true }),
-    );
-  } catch (e) {
-    return json({ error: "Il gruppo non riesce a coordinarsi ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+    const rawRoute = await groqChat(env, directorSys, `Discussione:\n${transcript}\n\nDecidi (solo JSON).`, {
+      temperature: 0.4,
+      maxTokens: 60,
+      json: true,
+    });
+    route = JSON.parse(extractJson(rawRoute));
+  } catch {
+    // Regista non parsabile (es. Gemini risponde in prosa): NON moriamo, si
+    // procede sotto con un agente casuale. Il cerchio prosegue comunque.
+    route = {};
   }
   let agent = GROUP_AGENTS.find((a) => a.id === route.agentId && a.id !== lastSpeaker);
   if (!agent) {
@@ -650,6 +717,11 @@ Rispondi SOLO JSON: {"agentId":"<id>","next":"agent|user|done"}`;
 Chi sei: ${agent.persona}
 Tratti: ${agent.traits.join(", ")}. Sei più forte su: ${agent.expertise}.
 Parla in PRIMA PERSONA, ${tone}, 1-3 frasi, tono da chat viva. Porta la TUA prospettiva per far avanzare la predizione; puoi citare altri agenti o l'utente per nome. Resta te stesso, niente meta-commenti né JSON.`;
+  // RICERCA ONLINE in tempo reale: ogni agente, PRIMA di parlare, cerca dal suo
+  // angolo (la sua expertise) → la voce è fondata su dati veri, non solo opinione.
+  const topic = (turns.find((t) => t.agent === "user")?.content ?? turns[0].content).slice(0, 160);
+  const liveCtx = await liveSearch(`${topic} ${agent.expertise}`);
+
   let content = "…";
   try {
     content =
@@ -657,8 +729,12 @@ Parla in PRIMA PERSONA, ${tone}, 1-3 frasi, tono da chat viva. Porta la TUA pros
         await groqChat(
           env,
           agentSys + (name ? `\n[L'utente: ${name}]` : ""),
-          `Discussione finora:\n${transcript}\n\nTocca a te (${agent.name}). Scrivi solo il tuo messaggio.`,
-          { temperature: agent.temperature, maxTokens: 220 },
+          `Discussione finora:\n${transcript}\n\n${
+            liveCtx
+              ? `[RICERCHE ONLINE in tempo reale — tuo angolo "${agent.expertise}":\n${liveCtx}\n— se pertinenti, fonda il tuo intervento su questi dati reali e cita un fatto concreto.]\n\n`
+              : ""
+          }Tocca a te (${agent.name}). Scrivi solo il tuo messaggio.`,
+          { temperature: agent.temperature, maxTokens: 240 },
         )
       )
         .trim()
@@ -718,6 +794,9 @@ Struttura in markdown:
 (il ragionamento chiave emerso dagli agenti e i fattori decisivi)
 Concreto, niente disclaimer inutili.`;
 
+  // La predizione finale è FONDATA su ricerche online in tempo reale sul tema.
+  const liveCtx = await liveSearch(question);
+
   let data;
   try {
     data = await geminiGenerate(env, {
@@ -725,7 +804,16 @@ Concreto, niente disclaimer inutili.`;
       contents: [
         {
           role: "user",
-          parts: [{ text: `Domanda/scenario: ${question}\n\nSimulazione degli agenti:\n${transcript}\n\nProduci la predizione finale.` }],
+          parts: [
+            {
+              text:
+                `Domanda/scenario: ${question}\n\nSimulazione degli agenti:\n${transcript}\n\n` +
+                (liveCtx
+                  ? `[RICERCHE ONLINE in tempo reale sul tema:\n${liveCtx}\n— pesa questi dati reali nella predizione e nelle probabilità.]\n\n`
+                  : "") +
+                `Produci la predizione finale.`,
+            },
+          ],
         },
       ],
       generationConfig: { temperature: 0.7, maxOutputTokens: 4096, thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
