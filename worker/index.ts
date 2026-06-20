@@ -282,22 +282,18 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   // ricerca web (toggle utente): inietta risultati reali nel contesto
   const webCtx = body.search ? await webSearch(lastUser) : "";
 
+  const systemText =
+    SOUL +
+    (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
+    modeHint +
+    (webCtx ? `\n\n[RISULTATI WEB (Wikipedia) per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
+
   const payload = {
     model: groqModel,
     stream: true,
     temperature: 0.85,
     max_tokens: 2048,
-    messages: [
-      {
-        role: "system",
-        content:
-          SOUL +
-          (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
-          modeHint +
-          (webCtx ? `\n\n[RISULTATI WEB (Wikipedia) per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : ""),
-      },
-      ...messages,
-    ],
+    messages: [{ role: "system", content: systemText }, ...messages],
   };
 
   const upstream = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -309,9 +305,11 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     body: JSON.stringify(payload),
   });
 
+  // Se Groq è a quota (429) o giù (5xx) NON moriamo: ripieghiamo su Gemini in
+  // streaming, riconvertito nel formato SSE che il client già legge. Così
+  // chat/canvas/apprendimento restano vivi anche col limite giornaliero Groq.
   if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => "");
-    return json({ error: "upstream", status: upstream.status, detail: detail.slice(0, 300) }, 502, cors);
+    return streamGeminiChat(req, env, ctx, messages, systemText, visitorId, name, lastUser, cors);
   }
 
   // Tee: passa al client E accumula il testo per la memoria.
@@ -349,11 +347,100 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   });
 }
 
-// ── Gemini con fallback: catena modelli (recente→vecchio) × chiavi disponibili ─
 interface GeminiPart {
   text?: string;
   thought?: boolean;
 }
+
+/**
+ * Fallback di chat su Gemini in STREAMING quando Groq è a quota o giù. Prova
+ * modelli (dal più recente) × chiavi finché uno risponde, e riconverte l'SSE di
+ * Gemini nel formato OpenAI ({choices:[{delta:{content}}]}) che il client legge
+ * già — niente da cambiare lato frontend. Identico flusso di chat, altra spina.
+ */
+async function streamGeminiChat(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  messages: Msg[],
+  systemText: string,
+  visitorId: string,
+  name: string,
+  lastUser: string,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+  const reqBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents,
+    generationConfig: { temperature: 0.85, maxOutputTokens: 2048 },
+  });
+
+  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  let upstream: Response | null = null;
+  let last = "";
+  outer: for (const model of geminiModels(env)) {
+    for (const key of keys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+        last = `${model}:${res.status}`;
+        if (res.status === 400 || res.status === 404) break;
+      } catch (e) {
+        last = `${model}:${(e as Error).message}`;
+      }
+    }
+  }
+  if (!upstream || !upstream.body) {
+    return json({ error: "Il servizio è momentaneamente occupato. Riprova tra poco.", detail: last }, 502, cors);
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buf = "";
+  let acc = "";
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buf += decoder.decode(chunk, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const j = JSON.parse(d) as GeminiResp;
+          for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+            if (!p.text || p.thought) continue;
+            acc += p.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: p.text } }] })}\n\n`));
+          }
+        } catch {
+          /* frammento parziale, ignora */
+        }
+      }
+    },
+    flush(controller) {
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, acc));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(transform), {
+    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+}
+
 interface GeminiResp {
   candidates?: { content?: { parts?: GeminiPart[] } }[];
 }
