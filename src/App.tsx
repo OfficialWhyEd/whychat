@@ -377,7 +377,7 @@ function Chat() {
           <ModelSelector model={model} onModel={setModel} />
           <button
             onClick={askName}
-            className="mono ml-auto rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+            className="mono ml-auto max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>
@@ -395,16 +395,21 @@ function Chat() {
           </main>
         ) : earth ? (
           <main className="min-h-0 flex-1">
-            <WhyEarth />
+            <WhyEarth onExit={() => setMode("chat")} />
           </main>
         ) : entropy ? (
           <main className="min-h-0 flex-1">
-            <WhyEntropy />
+            <WhyEntropy onExit={() => setMode("chat")} />
           </main>
         ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
             <div className="mx-auto h-full max-w-4xl">
-              <BlankSheet key={sheetHydra.key} session={sheetHydra.session} onPersist={persistSheet} />
+              <BlankSheet
+                key={sheetHydra.key}
+                session={sheetHydra.session}
+                onPersist={persistSheet}
+                onExit={() => setMode("chat")}
+              />
             </div>
           </main>
         ) : (
@@ -436,7 +441,7 @@ function Chat() {
         )}
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
-        <footer className={`px-4 pb-4 pt-2 ${group ? "hidden" : ""}`}>
+        <footer className={`px-4 pb-4 pt-2 ${group || earth || entropy || sheet ? "hidden" : ""}`}>
           <div className="relative mx-auto max-w-2xl">
             <AnimatePresence>
               {!atBottom && !empty && !sheet && !earth && !entropy && (

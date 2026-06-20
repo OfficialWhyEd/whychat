@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
  * notazioni mono) tutto nei colori del brand: cremisi / ambra su void.
  * Grafiche geometriche + animazioni, native, zero dipendenze esterne.
  */
-export default function WhyEntropy() {
+export default function WhyEntropy({ onExit }: { onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hud, setHud] = useState({ e: 0, nodes: 0, frame: 0 });
 
@@ -165,10 +165,18 @@ export default function WhyEntropy() {
           <span className="h-3 w-px bg-[var(--color-line2)]" />
           <span className="mono text-[0.5rem] text-faint">EST. 2026</span>
         </div>
-        <div className="hidden items-center gap-3 sm:flex">
-          <span className="mono text-[0.55rem] text-ember">ENTROPY {hud.e.toFixed(3)}</span>
-          <span className="h-1 w-1 rounded-full bg-[var(--color-line2)]" />
-          <span className="mono text-[0.55rem] text-faint">NODES {hud.nodes}</span>
+        <div className="flex items-center gap-3">
+          <span className="mono hidden text-[0.55rem] text-ember sm:inline">ENTROPY {hud.e.toFixed(3)}</span>
+          <span className="hidden h-1 w-1 rounded-full bg-[var(--color-line2)] sm:inline-block" />
+          <span className="mono hidden text-[0.55rem] text-faint sm:inline">NODES {hud.nodes}</span>
+          {onExit && (
+            <button
+              onClick={onExit}
+              className="mono pointer-events-auto rounded-full border border-[var(--color-line2)] px-2.5 py-1 text-[0.5rem] text-faint transition hover:border-signal/50 hover:text-paper"
+            >
+              ESCI ✕
+            </button>
+          )}
         </div>
       </div>
 

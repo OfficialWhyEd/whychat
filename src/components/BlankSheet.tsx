@@ -26,9 +26,10 @@ export interface SheetSession {
 interface Props {
   session?: SheetSession;
   onPersist?: (s: SheetSession) => void;
+  onExit?: () => void;
 }
 
-export default function BlankSheet({ session, onPersist }: Props) {
+export default function BlankSheet({ session, onPersist, onExit }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
@@ -170,6 +171,14 @@ export default function BlankSheet({ session, onPersist }: Props) {
   return (
     <div className="flex h-full flex-col">
       <div ref={wrapRef} className="glass relative flex-1 overflow-hidden rounded-3xl">
+        {onExit && (
+          <button
+            onClick={onExit}
+            className="mono absolute left-4 top-4 z-10 rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] px-2.5 py-1 text-[0.5rem] text-faint backdrop-blur transition hover:border-signal/50 hover:text-paper"
+          >
+            ESCI ✕
+          </button>
+        )}
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}
