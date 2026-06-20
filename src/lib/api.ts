@@ -103,6 +103,48 @@ export async function streamChat(
   }
 }
 
+/**
+ * OnlyType: WhyChat GUARDA il foglio (immagine) e risponde in parole, in
+ * streaming. `image` è un dataURL (PNG/JPEG) del canvas; `prompt` è cosa chiedi.
+ */
+export async function seeSheet(
+  image: string,
+  prompt: string,
+  history: ChatMessage[],
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await postWithRetry(
+    "/api/see",
+    { image, prompt, history, visitorId: visitorId(), name: getName() },
+    signal,
+  );
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const data = t.slice(5).trim();
+      if (data === "[DONE]") return;
+      try {
+        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string") onToken(delta);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
+}
+
 export interface Dream {
   date: string;
   ts: string;
