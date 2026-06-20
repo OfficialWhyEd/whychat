@@ -588,6 +588,107 @@ function geminiModels(env: Env): string[] {
   return list.length ? list : DEFAULT_GEMINI_MODELS;
 }
 
+// ── /api/see — OnlyType: WhyChat GUARDA il foglio (Gemini multimodale) e lo
+// rappresenta/ragiona in PAROLE. È il tool dedicato alla modalità OnlyType:
+// stesso pattern SSE delle altre risposte Gemini, ma con l'immagine nel contesto.
+async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { image?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+
+  const dataUrl = String(body.image ?? "");
+  const m = /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(dataUrl);
+  if (!m) return json({ error: "immagine non valida" }, 400, cors);
+  const mimeType = m[1];
+  const data = m[2].slice(0, 5_000_000); // guard payload
+  const prompt = String(body.prompt ?? "").slice(0, MAX_MESSAGE_CHARS) || "Guarda il mio foglio e dimmi cosa vedi.";
+  const name = String(body.name ?? "").slice(0, 80);
+  const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
+
+  const hist = sanitizeMessages(body.history) ?? [];
+  const contents: unknown[] = hist.map((mm) => ({
+    role: mm.role === "assistant" ? "model" : "user",
+    parts: [{ text: mm.content }],
+  }));
+  contents.push({ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType, data } }] });
+
+  const systemText =
+    SOUL + BEHAVIOR + nowContext() +
+    (name ? `\n\n[Parli con: ${name}]` : "") +
+    `\n\n[MODALITÀ ONLYTYPE — VISIONE] Stai guardando il foglio della persona (disegno + scritte a mano). Rappresenta in PAROLE ciò che vedi: leggi lo sketch, cogli l'idea dietro al segno, dai forma a quello che sta cercando di esprimere. Se è l'inizio di un'idea o di un programma, aiutalo a svilupparla. Se è vuoto o illeggibile, dillo con leggerezza e invitalo a buttare giù un segno. Concreto e vivo, niente elenchi freddi.`;
+
+  const reqBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents,
+    generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
+  });
+
+  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  let upstream: Response | null = null;
+  let last = "";
+  outer: for (const model of geminiModels(env)) {
+    for (const key of keys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+        last = `${model}:${res.status}`;
+        if (res.status === 400 || res.status === 404) break;
+      } catch (e) {
+        last = `${model}:${(e as Error).message}`;
+      }
+    }
+  }
+  if (!upstream || !upstream.body) {
+    return json({ error: "Il servizio è momentaneamente occupato. Riprova tra poco.", detail: last }, 502, cors);
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buf = "";
+  let acc = "";
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buf += decoder.decode(chunk, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const j = JSON.parse(d) as GeminiResp;
+          for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+            if (!p.text || p.thought) continue;
+            acc += p.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: p.text } }] })}\n\n`));
+          }
+        } catch {
+          /* frammento parziale, ignora */
+        }
+      }
+    },
+    flush(controller) {
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, "[OnlyType: guarda il foglio]", acc));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(transform), {
+    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+}
+
 /**
  * Genera con Gemini provando in ordine ogni modello (dal più recente) su ogni
  * chiave API finché una combinazione risponde. Così un singolo modello a quota,
@@ -1049,6 +1150,7 @@ export default {
     try {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
+      if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env, ctx);
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);
       if (url.pathname === "/api/group/predict" && req.method === "POST") return await handleGroupPredict(req, env, ctx);
       if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);
