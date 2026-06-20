@@ -1,5 +1,5 @@
 import { forwardRef, useRef, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 
 /**
  * OriginButton — il componente che mi hai mandato (21st.dev), riscritto sui token di WhyChat.
@@ -28,6 +28,29 @@ const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function O
   const innerRef = useRef<HTMLButtonElement | null>(null);
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [active, setActive] = useState(false);
+
+  // Micro-fisica magnetica: il bottone insegue il cursore di pochi px.
+  // Motion values fuori dal render cycle (mai useState) → 60fps anche su mobile.
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const x = useSpring(mx, { stiffness: 280, damping: 18, mass: 0.5 });
+  const y = useSpring(my, { stiffness: 280, damping: 18, mass: 0.5 });
+  const PULL = 0.3; // quanto insegue
+  const MAX = 5; // px massimi di spostamento
+
+  const magnetize = (e: React.PointerEvent) => {
+    const el = innerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+    mx.set(Math.max(-MAX, Math.min(MAX, dx * PULL)));
+    my.set(Math.max(-MAX, Math.min(MAX, dy * PULL)));
+  };
+  const demagnetize = () => {
+    mx.set(0);
+    my.set(0);
+  };
 
   // Dimensione del cerchio: la diagonale piena, così copre il bottone da qualunque angolo parta.
   const coverSize = 640;
@@ -65,10 +88,16 @@ const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function O
         updateOriginFromPointer(e);
         setActive(true);
       }}
-      onPointerLeave={() => setActive(false)}
+      onPointerMove={(e) => {
+        if (!disabled) magnetize(e);
+      }}
+      onPointerLeave={() => {
+        setActive(false);
+        demagnetize();
+      }}
       onPointerUp={() => setActive(false)}
       className={`relative overflow-hidden isolate ${className}`}
-      style={fillText && active ? { color: fillText } : undefined}
+      style={fillText && active ? { x, y, color: fillText } : { x, y }}
     >
       <motion.span
         aria-hidden
