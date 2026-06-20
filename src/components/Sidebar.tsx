@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { relativeTime, type Chat } from "../lib/chats";
 import SoulOrb from "./SoulOrb";
 import SignatureMark from "./SignatureMark";
@@ -50,9 +51,13 @@ export default function Sidebar({
       >
         {/* brand: orb + firma scritta a mano, con chiusura sidebar */}
         <div className="flex items-center gap-1.5 px-3 pb-3 pt-3">
-          <div className="-m-1 shrink-0">
+          <motion.div
+            className="-m-1 shrink-0"
+            animate={{ y: [0, -3.5, 0], scale: [1, 1.03, 1] }}
+            transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+          >
             <SoulOrb size={44} active={streaming} />
-          </div>
+          </motion.div>
           <SignatureMark className="h-9 w-auto min-w-0 flex-1 text-paper" />
           <button
             onClick={onClose}
