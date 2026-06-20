@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 
@@ -82,6 +82,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const reduce = useReducedMotion();
   // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
   const armed = value.trim().length > 0 && !disabled;
 
@@ -264,14 +265,62 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               onClick={submit}
               disabled={disabled || !value.trim()}
               title="Invia"
-              fill="#e0673f"
-              style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)" }}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
-                armed ? "shadow-[0_0_20px_-4px_rgba(224,103,63,0.6)]" : ""
+              fill="#ffd9b0"
+              fillText="#0a0908"
+              style={{
+                // Metallo fuso: top illuminato (ambra) che cola verso il cremisi profondo.
+                background:
+                  "radial-gradient(125% 120% at 50% 8%, #ffce9e 0%, #f0a36a 22%, #d4582c 55%, #b23d1d 78%, #8a2f17 100%)",
+              }}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#0a0908] outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
+                armed
+                  ? "shadow-[inset_0_1.5px_1px_rgba(255,233,206,0.6),inset_0_-3px_6px_-1px_rgba(74,22,10,0.65),0_0_22px_-4px_rgba(224,103,63,0.6)]"
+                  : "shadow-[inset_0_1.5px_1px_rgba(255,233,206,0.5),inset_0_-3px_6px_-1px_rgba(74,22,10,0.6)]"
               }`}
+              overlay={
+                <>
+                  {/* bande metalliche anisotrope che ruotano lente: è il "liquido" del metallo.
+                      rotate = transform (GPU), clippato a cerchio dall'overflow del bottone. */}
+                  <motion.span
+                    aria-hidden
+                    className="pointer-events-none absolute -inset-1/2 mix-blend-overlay"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg at 50% 50%, #240c06, #ffe9cd, #c94b25, #3c150b, #ffd29c, #8a2f17, #ffeccf, #240c06)",
+                      opacity: 0.62,
+                    }}
+                    animate={reduce ? undefined : { rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 9, ease: "linear" }}
+                  />
+                  {/* riflesso speculare stretto che scorre: la lama di luce sul metallo */}
+                  <motion.span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-screen"
+                    style={{
+                      background:
+                        "linear-gradient(118deg, transparent 38%, rgba(255,247,233,0.8) 49%, transparent 60%)",
+                      backgroundSize: "260% 260%",
+                    }}
+                    animate={reduce ? undefined : { backgroundPosition: ["150% 150%", "-60% -60%"] }}
+                    transition={{ repeat: Infinity, duration: 5.2, ease: "easeInOut", delay: 0.6 }}
+                  />
+                  {/* specular alto fisso: curvatura lucida del metallo */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full"
+                    style={{ zIndex: 1, background: "radial-gradient(46% 34% at 39% 17%, rgba(255,250,242,0.7), transparent 66%)" }}
+                  />
+                  {/* fresnel rim cromato */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full"
+                    style={{ zIndex: 1, boxShadow: "inset 0 0 0 1px rgba(255,236,212,0.3), inset 0 1px 2px rgba(255,242,224,0.45)" }}
+                  />
+                </>
+              }
             >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#0a0908" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" className="relative">
+                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </OriginButton>
           )}

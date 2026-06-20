@@ -19,12 +19,15 @@ interface OriginButtonProps {
   title?: string;
   /** Stile extra (es. background del bottone) — viene fuso con x/y magnetici. */
   style?: React.CSSProperties;
+  /** Layer a tutta superficie (es. riflesso liquid metal), reso direttamente nel bottone
+   *  così `inset-0` si ancora al cerchio intero e non al wrapper del contenuto. */
+  overlay?: ReactNode;
 }
 
 const fillTransition = { type: "spring" as const, stiffness: 320, damping: 32, mass: 0.6 };
 
 const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function OriginButton(
-  { children, onClick, disabled, type = "button", className = "", fill = "#c94b25", fillText, title, style: extraStyle },
+  { children, onClick, disabled, type = "button", className = "", fill = "#c94b25", fillText, title, style: extraStyle, overlay },
   forwardedRef,
 ) {
   const innerRef = useRef<HTMLButtonElement | null>(null);
@@ -109,6 +112,7 @@ const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function O
         style={{ left: origin.x, top: origin.y, width: coverSize, height: coverSize, background: fill }}
         transition={fillTransition}
       />
+      {overlay}
       <span className="relative z-10 inline-flex w-full items-center justify-center gap-2">
         {children}
       </span>
