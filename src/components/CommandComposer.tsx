@@ -73,9 +73,11 @@ interface Props {
   onMode: (m: Mode) => void;
   onStop?: () => void;
   streaming: boolean;
+  search?: boolean;
+  onToggleSearch?: () => void;
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch }: Props) {
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -169,6 +171,40 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </button>
+
+          {/* tasto: cerca sul web (Wikipedia) — inietta risultati reali nel contesto */}
+          {onToggleSearch && (
+            <motion.button
+              type="button"
+              onClick={onToggleSearch}
+              title="Cerca sul web"
+              whileTap={{ scale: 0.93 }}
+              transition={{ type: "spring", stiffness: 420, damping: 16 }}
+              className={`mb-0.5 flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 transition ${
+                search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-faint hover:text-dim"
+              }`}
+            >
+              <motion.span animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" strokeLinecap="round" />
+                </svg>
+              </motion.span>
+              <AnimatePresence>
+                {search && (
+                  <motion.span
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: "auto", opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="mono overflow-hidden whitespace-nowrap text-[0.6rem]"
+                  >
+                    CERCA
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          )}
 
           <div className="relative flex-1">
             {/* placeholder che si auto-digita quando la barra è vuota (chat) */}

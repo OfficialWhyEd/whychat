@@ -39,6 +39,7 @@ function Chat() {
   const [streaming, setStreaming] = useState(false);
   const [mode, setMode] = useState<Mode>("chat");
   const [model, setModel] = useState("whychat-5.5");
+  const [webSearch, setWebSearch] = useState(false);
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
   // stato del pannello: ricorda come l'hai lasciato (aperto/chiuso); default per
@@ -152,6 +153,7 @@ function Chat() {
           ctrl.signal,
           useMode,
           model,
+          webSearch,
         );
         patch(acc, true);
       }
@@ -312,6 +314,8 @@ function Chat() {
               onMode={setMode}
               onStop={stop}
               streaming={busy}
+              search={webSearch}
+              onToggleSearch={() => setWebSearch((s) => !s)}
             />
             <p className="mt-2 text-center text-[0.6rem] text-faint">
               WhyChat · {modelName(model)} · le conversazioni possono essere conservate per farlo

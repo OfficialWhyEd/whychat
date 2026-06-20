@@ -236,13 +236,34 @@ async function logTurn(
 }
 
 // ── /api/chat — Groq streaming (SSE) con tee verso la memoria ─────────────────
+// Ricerca web keyless e affidabile: Wikipedia (IT). Restituisce risultati reali
+// da iniettare nel contesto, così WhyChat risponde su fatti veri invece di inventare.
+async function webSearch(query: string): Promise<string> {
+  if (!query.trim()) return "";
+  try {
+    const url = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+      query,
+    )}&format=json&srlimit=4&srprop=snippet`;
+    const res = await fetch(url, { headers: { "User-Agent": "WhyChat/1.0 (whyed)" } });
+    if (!res.ok) return "";
+    const d = (await res.json()) as { query?: { search?: { title: string; snippet: string }[] } };
+    const items = d.query?.search ?? [];
+    if (!items.length) return "";
+    return items
+      .map((x, i) => `[${i + 1}] ${x.title}: ${x.snippet.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").slice(0, 220)}`)
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
+
 async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
   if (req.headers.get("Access-Control-Allow-Origin") === "null") {
     // origine non in lista → blocco (difesa anti-hotlinking della tua quota)
   }
 
-  let body: { messages?: unknown; visitorId?: unknown; name?: unknown; mode?: unknown; model?: unknown };
+  let body: { messages?: unknown; visitorId?: unknown; name?: unknown; mode?: unknown; model?: unknown; search?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -258,6 +279,9 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
+  // ricerca web (toggle utente): inietta risultati reali nel contesto
+  const webCtx = body.search ? await webSearch(lastUser) : "";
+
   const payload = {
     model: groqModel,
     stream: true,
@@ -266,7 +290,11 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
     messages: [
       {
         role: "system",
-        content: SOUL + (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") + modeHint,
+        content:
+          SOUL +
+          (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
+          modeHint +
+          (webCtx ? `\n\n[RISULTATI WEB (Wikipedia) per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : ""),
       },
       ...messages,
     ],

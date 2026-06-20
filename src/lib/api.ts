@@ -66,10 +66,11 @@ export async function streamChat(
   signal?: AbortSignal,
   mode = "chat",
   model = "whychat-5.5",
+  search = false,
 ): Promise<void> {
   const res = await postWithRetry(
     "/api/chat",
-    { messages, visitorId: visitorId(), name: getName(), mode, model },
+    { messages, visitorId: visitorId(), name: getName(), mode, model, search },
     signal,
   );
 
