@@ -40,8 +40,17 @@ export default function WhyEarthLive({ focus, onExit }: { focus: MapPin | null; 
       } catch {
         /* proiezione globe non supportata: resta piatta, funziona comunque */
       }
+      map.resize();
     });
+    // resize di sicurezza: a volte il container ha dimensione 0 al primo frame
+    const t1 = window.setTimeout(() => map.resize(), 150);
+    const t2 = window.setTimeout(() => map.resize(), 600);
+    const onResize = () => map.resize();
+    window.addEventListener("resize", onResize);
     return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("resize", onResize);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
