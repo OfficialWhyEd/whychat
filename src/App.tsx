@@ -362,7 +362,7 @@ function Chat() {
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Particelle confinate all'area principale → si allineano all'hero e si
             riallineano da sole quando la sidebar si apre/chiude */}
-        <SoulParticles formText={empty && !sheet && !group && !earth} modelName={modelName(model)} />
+        <SoulParticles formText={empty && !sheet && !group && !earth && !entropy} modelName={modelName(model)} />
         {/* Top bar */}
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
@@ -393,13 +393,38 @@ function Chat() {
               onExit={() => setMode("chat")}
             />
           </main>
-        ) : earth ? (
-          <main className="min-h-0 flex-1">
-            <WhyEarth onExit={() => setMode("chat")} />
-          </main>
-        ) : entropy ? (
-          <main className="min-h-0 flex-1">
-            <WhyEntropy onExit={() => setMode("chat")} />
+        ) : earth || entropy ? (
+          <main className="relative min-h-0 flex-1 overflow-hidden">
+            {/* il visivo (globo / geometria) resta protagonista, sullo sfondo */}
+            <div className="absolute inset-0">
+              {earth ? <WhyEarth onExit={() => setMode("chat")} /> : <WhyEntropy onExit={() => setMode("chat")} />}
+            </div>
+            {/* la conversazione galleggia sopra: il mondo resta visibile, le risposte appaiono */}
+            {!empty && (
+              <div className="scroll-thin pointer-events-none absolute inset-x-0 bottom-0 top-1/3 flex flex-col justify-end overflow-y-auto">
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 pb-3">
+                  {messages.map((m, i) => (
+                    <div
+                      key={m.id}
+                      className="pointer-events-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.74)] backdrop-blur-md"
+                    >
+                      <ChatMessage
+                        msg={m}
+                        onRetry={
+                          m.role === "assistant" && !streaming
+                            ? () => {
+                                const prevUser = [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
+                                if (prevUser) send(prevUser.content);
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                  ))}
+                  <div ref={bottomRef} className="h-1" />
+                </div>
+              </div>
+            )}
           </main>
         ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
@@ -441,7 +466,7 @@ function Chat() {
         )}
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
-        <footer className={`px-4 pb-4 pt-2 ${group || earth || entropy || sheet ? "hidden" : ""}`}>
+        <footer className={`px-4 pb-4 pt-2 ${group || sheet ? "hidden" : ""}`}>
           <div className="relative mx-auto max-w-2xl">
             <AnimatePresence>
               {!atBottom && !empty && !sheet && !earth && !entropy && (
