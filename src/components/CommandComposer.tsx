@@ -117,8 +117,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               exit="exit"
               className="glass absolute bottom-[calc(100%+8px)] left-0 z-20 w-full overflow-hidden rounded-2xl"
             >
-              <div className="mono px-4 pb-1 pt-3 text-[0.5rem] text-faint">MODALITÀ</div>
-              <ul className="px-1.5 pb-2">
+              {/* fondo solido: il menu non lascia trasparire la chat dietro */}
+              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[#141009]/92" />
+              <div className="relative mono px-4 pb-1 pt-3 text-[0.5rem] text-faint">MODALITÀ</div>
+              <ul className="relative px-1.5 pb-2">
                 {MODES.map((m) => {
                   const active = m.id === mode;
                   return (
@@ -152,24 +154,54 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         )}
       </AnimatePresence>
 
-      {/* Barra */}
-      <div className="glass glass-sheen rounded-[26px] p-2 pl-2 transition-all duration-300 focus-within:shadow-[0_0_28px_-8px_rgba(201,75,37,0.55)] focus-within:ring-1 focus-within:ring-signal/30">
-        <div className="flex items-end gap-2">
-          {/* chip modalità → apre la palette */}
+      {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
+      <div className="glass glass-sheen rounded-[26px] px-3.5 pb-2.5 pt-3 transition-all duration-300 focus-within:shadow-[0_0_28px_-8px_rgba(201,75,37,0.55)] focus-within:ring-1 focus-within:ring-signal/30">
+        {/* riga 1 — il testo */}
+        <div className="relative px-0.5">
+          {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
+          {!value && mode !== "sheet" && (
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 text-[1rem] leading-7 text-faint">
+              <Typewriter text={PLACEHOLDERS} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
+            </div>
+          )}
+          <textarea
+            ref={ref}
+            value={value}
+            rows={1}
+            disabled={disabled}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              }
+              if (e.key === "Escape") setMenu(false);
+            }}
+            placeholder={mode === "sheet" ? "Scrivi un pensiero sul foglio…" : ""}
+            className="scroll-thin block max-h-[200px] w-full resize-none bg-transparent py-1 text-[1rem] leading-7 text-paper placeholder:text-faint focus:outline-none"
+          />
+        </div>
+
+        {/* riga 2 — i controlli, allineati e simmetrici */}
+        <div className="mt-1.5 flex items-center gap-2">
+          {/* modalità → apre la palette */}
           <button
             onClick={() => setMenu((s) => !s)}
             title="Scegli modalità"
-            className={`mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-2 text-[0.62rem] transition ${
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border pl-2.5 pr-2.5 text-[0.66rem] transition ${
               mode === "chat"
-                ? "border-[var(--color-line2)] text-faint hover:text-dim"
+                ? "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
                 : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember"
             }`}
           >
-            <span className={mode === "chat" ? "text-dim" : "text-ember"}>{current.icon}</span>
-            {mode !== "chat" && <span className="mono">{current.label}</span>}
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" className="opacity-60">
+            <span className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</span>
+            <span className="mono whitespace-nowrap">{mode === "chat" ? "MODALITÀ" : current.label}</span>
+            <motion.svg
+              width="10" height="10" viewBox="0 0 24 24" fill="none" className="opacity-60"
+              animate={{ rotate: menu ? 180 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            >
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            </svg>
+            </motion.svg>
           </button>
 
           {/* tasto: cerca sul web (Wikipedia) — inietta risultati reali nel contesto */}
@@ -180,8 +212,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               title="Cerca sul web"
               whileTap={{ scale: 0.93 }}
               transition={{ type: "spring", stiffness: 420, damping: 16 }}
-              className={`mb-0.5 flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 transition ${
-                search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-faint hover:text-dim"
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 transition ${
+                search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
               <motion.span animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
@@ -197,7 +229,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     animate={{ width: "auto", opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="mono overflow-hidden whitespace-nowrap text-[0.6rem]"
+                    className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
                   >
                     CERCA
                   </motion.span>
@@ -206,36 +238,14 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             </motion.button>
           )}
 
-          <div className="relative flex-1">
-            {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
-            {!value && mode !== "sheet" && (
-              <div className="pointer-events-none absolute left-0 top-0 flex h-full items-center overflow-hidden whitespace-nowrap py-2.5 text-[0.98rem] leading-relaxed text-faint">
-                <Typewriter text={PLACEHOLDERS} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
-              </div>
-            )}
-            <textarea
-              ref={ref}
-              value={value}
-              rows={1}
-              disabled={disabled}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-                if (e.key === "Escape") setMenu(false);
-              }}
-              placeholder={mode === "sheet" ? "Scrivi un pensiero sul foglio…" : ""}
-              className="scroll-thin max-h-[200px] w-full resize-none bg-transparent py-2.5 text-[0.98rem] leading-relaxed text-paper placeholder:text-faint focus:outline-none"
-            />
-          </div>
+          {/* spinge il send a destra: bilancia la riga */}
+          <div className="flex-1" />
 
           {streaming ? (
             <button
               onClick={onStop}
               title="Ferma"
-              className="mb-0.5 grid h-10 w-10 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
             >
               <span className="block h-3 w-3 rounded-[3px] bg-paper" />
             </button>
@@ -245,10 +255,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               disabled={disabled || !value.trim()}
               title="Invia"
               fill="#a73c1c"
-              className="mb-0.5 grid h-10 w-10 place-items-center rounded-full transition disabled:opacity-35"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full transition disabled:opacity-35"
             >
               <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)", zIndex: -1 }} />
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
                 <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#0a0908" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </OriginButton>
