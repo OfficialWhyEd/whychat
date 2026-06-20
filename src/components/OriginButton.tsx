@@ -17,12 +17,14 @@ interface OriginButtonProps {
   /** Colore del testo quando il riempimento è attivo. */
   fillText?: string;
   title?: string;
+  /** Stile extra (es. background del bottone) — viene fuso con x/y magnetici. */
+  style?: React.CSSProperties;
 }
 
 const fillTransition = { type: "spring" as const, stiffness: 320, damping: 32, mass: 0.6 };
 
 const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function OriginButton(
-  { children, onClick, disabled, type = "button", className = "", fill = "#c94b25", fillText, title },
+  { children, onClick, disabled, type = "button", className = "", fill = "#c94b25", fillText, title, style: extraStyle },
   forwardedRef,
 ) {
   const innerRef = useRef<HTMLButtonElement | null>(null);
@@ -97,7 +99,7 @@ const OriginButton = forwardRef<HTMLButtonElement, OriginButtonProps>(function O
       }}
       onPointerUp={() => setActive(false)}
       className={`relative overflow-hidden isolate ${className}`}
-      style={fillText && active ? { x, y, color: fillText } : { x, y }}
+      style={{ x, y, ...extraStyle, ...(fillText && active ? { color: fillText } : {}) }}
     >
       <motion.span
         aria-hidden

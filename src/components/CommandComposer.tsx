@@ -264,12 +264,12 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               onClick={submit}
               disabled={disabled || !value.trim()}
               title="Invia"
-              fill="#a73c1c"
+              fill="#e0673f"
+              style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)" }}
               className={`grid h-11 w-11 shrink-0 place-items-center rounded-full outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
-                armed ? "shadow-[0_0_20px_-4px_rgba(224,103,63,0.65)]" : ""
+                armed ? "shadow-[0_0_20px_-4px_rgba(224,103,63,0.6)]" : ""
               }`}
             >
-              <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)", zIndex: -1 }} />
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
                 <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#0a0908" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
