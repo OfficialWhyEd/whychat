@@ -20,6 +20,28 @@ import type { MapPin } from "./components/WhyEarthLive";
 const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
 // estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
 const LUOGO_RE = /\[\[\s*LUOGO\s*:\s*([^\]]+?)\s*\]\]/i;
+
+// parole con l'iniziale maiuscola che NON sono luoghi (inizi frase / la chat)
+const PLACE_STOP = new Set([
+  "Il", "Lo", "La", "I", "Gli", "Le", "Un", "Uno", "Una", "Questo", "Questa", "Quando", "Come",
+  "Dove", "Perché", "Perche", "Sono", "Ecco", "Vuoi", "Ciao", "Parlami", "Dimmi", "Che", "Sì",
+  "Si", "No", "Ma", "Se", "Con", "Per", "Tra", "Fra", "Anche", "Ti", "Mi", "Ah", "Oh", "Beh",
+  "Ok", "Allora", "Certo", "WhyChat", "WhyEarth", "Edoardo", "WhyEd",
+]);
+
+// nomi propri candidati (sequenze Maiuscole) da geocodare per piantare il pin
+function placeCandidates(text: string): string[] {
+  const out: string[] = [];
+  const re = /([A-ZÀ-Ý][a-zà-ÿ']+(?:\s+[A-ZÀ-Ý][a-zà-ÿ']+){0,2})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null && out.length < 8) {
+    const cand = m[1].trim();
+    const first = cand.split(/\s+/)[0];
+    if (PLACE_STOP.has(first) || cand.length < 3) continue;
+    if (!out.includes(cand)) out.push(cand);
+  }
+  return out;
+}
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
@@ -84,21 +106,30 @@ function Chat() {
   const [earthLive, setEarthLive] = useState(false);
   const [mapPin, setMapPin] = useState<MapPin | null>(null);
   const lastGeoRef = useRef("");
-  // testo dell'ultimo messaggio assistant (per estrarre [[LUOGO:]] a stream finito)
+  // testo dell'ultimo messaggio assistant completo (per cercarvi un luogo a stream finito)
   const lastBotEarth = earth ? [...messages].reverse().find((m) => m.role === "assistant" && !m.streaming)?.content ?? "" : "";
+  const lastUserEarth = earth ? [...messages].reverse().find((m) => m.role === "user")?.content ?? "" : "";
   useEffect(() => {
-    if (!earth) return;
-    const mm = LUOGO_RE.exec(lastBotEarth);
-    const place = mm?.[1]?.trim();
-    if (!place || place === lastGeoRef.current) return;
-    lastGeoRef.current = place;
-    geocodePlace(place).then((pin) => {
-      if (pin) {
-        setMapPin(pin);
-        setEarthLive(true); // vola sulla mappa viva quando WhyChat punta un luogo
+    if (!earth || !lastBotEarth) return;
+    // 1) se il modello ha messo il marcatore [[LUOGO: ...]], usalo. 2) altrimenti
+    // estrai i nomi propri da domanda+risposta e geocoda il primo che esiste
+    // (così funziona anche con i modelli free che ignorano il marcatore).
+    const marker = LUOGO_RE.exec(lastBotEarth)?.[1]?.trim();
+    const cands = marker ? [marker] : [...placeCandidates(lastUserEarth), ...placeCandidates(lastBotEarth)];
+    const key = cands.join("|");
+    if (!cands.length || key === lastGeoRef.current) return;
+    lastGeoRef.current = key;
+    (async () => {
+      for (const c of cands.slice(0, 5)) {
+        const pin = await geocodePlace(c);
+        if (pin) {
+          setMapPin(pin);
+          setEarthLive(true); // vola sulla mappa viva quando emerge un luogo
+          break;
+        }
       }
-    });
-  }, [earth, lastBotEarth]);
+    })();
+  }, [earth, lastBotEarth, lastUserEarth]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
