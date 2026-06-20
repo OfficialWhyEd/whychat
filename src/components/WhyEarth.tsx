@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { geoOrthographic, geoPath, geoGraticule, geoBounds } from "d3-geo";
 import { timer } from "d3-timer";
-import { WORKER_URL } from "../lib/api";
 
 /**
  * WhyEarth — globo terrestre a puntini, dark e nei colori del brand. Ruota da
@@ -12,7 +11,7 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [flightCount, setFlightCount] = useState(0);
+  const [quakeCount, setQuakeCount] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -36,7 +35,7 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
 
     type Dot = { lng: number; lat: number };
     const dots: Dot[] = [];
-    let flights: [number, number][] = []; // voli reali [lng, lat]
+    let quakes: [number, number, number][] = []; // terremoti reali [lng, lat, mag]
     let land: { features: unknown[] } | null = null;
 
     const pointInPolygon = (pt: [number, number], poly: number[][]) => {
@@ -106,14 +105,17 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
           context.fill();
         }
       }
-      // voli reali (OpenSky) — puntini caldi e luminosi
-      for (const [lng, lat] of flights) {
+      // terremoti reali (USGS, ultime 24h) — grandezza per magnitudo
+      for (const [lng, lat, mag] of quakes) {
         const p = projection([lng, lat]);
         if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
+          const r = Math.max(1.3, (mag + 1) * 1.05) * s;
           context.beginPath();
-          context.arc(p[0], p[1], 1.7 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#f0a36a";
+          context.arc(p[0], p[1], r, 0, 2 * Math.PI);
+          context.fillStyle = mag >= 4 ? "#c94b25" : "#f0a36a";
+          context.globalAlpha = 0.85;
           context.fill();
+          context.globalAlpha = 1;
         }
       }
     };
@@ -177,25 +179,27 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
     canvas.addEventListener("wheel", onWheel, { passive: false });
     load();
 
-    // voli reali live (OpenSky via Worker), aggiornati ogni 30s
-    const loadFlights = async () => {
+    // terremoti reali live (USGS, ultime 24h) — keyless, CORS, browser-direct
+    const loadQuakes = async () => {
       try {
-        const r = await fetch(`${WORKER_URL}/api/flights`);
+        const r = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
         if (!r.ok) return;
-        const j = (await r.json()) as { flights?: [number, number][] };
-        flights = j.flights ?? [];
-        setFlightCount(flights.length);
+        const j = (await r.json()) as { features?: { geometry: { coordinates: number[] }; properties: { mag: number | null } }[] };
+        quakes = (j.features ?? []).map(
+          (f) => [f.geometry.coordinates[0], f.geometry.coordinates[1], f.properties.mag ?? 1] as [number, number, number],
+        );
+        setQuakeCount(quakes.length);
         render();
       } catch {
         /* ignora: il globo resta comunque */
       }
     };
-    loadFlights();
-    const flightTimer = setInterval(loadFlights, 30000);
+    loadQuakes();
+    const quakeTimer = setInterval(loadQuakes, 120000);
 
     return () => {
       t.stop();
-      clearInterval(flightTimer);
+      clearInterval(quakeTimer);
       canvas.removeEventListener("mousedown", onDown);
       canvas.removeEventListener("wheel", onWheel);
     };
@@ -208,8 +212,8 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
       {error && <div className="mono absolute text-[0.6rem] text-signal-soft">{error}</div>}
       <div className="mono pointer-events-none absolute bottom-4 left-4 text-[0.5rem] text-faint">
         TRASCINA · ZOOM
-        {flightCount > 0 && (
-          <span className="text-ember"> · ✈ {flightCount.toLocaleString("it-IT")} VOLI LIVE</span>
+        {quakeCount > 0 && (
+          <span className="text-ember"> · ◉ {quakeCount.toLocaleString("it-IT")} TERREMOTI 24h</span>
         )}
       </div>
     </div>
