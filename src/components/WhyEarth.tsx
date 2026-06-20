@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { geoOrthographic, geoPath, geoGraticule, geoBounds } from "d3-geo";
 import { timer } from "d3-timer";
+import { WORKER_URL } from "../lib/api";
 
 /**
  * WhyEarth — globo terrestre a puntini, dark e nei colori del brand. Ruota da
@@ -11,6 +12,7 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flightCount, setFlightCount] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -34,6 +36,7 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
 
     type Dot = { lng: number; lat: number };
     const dots: Dot[] = [];
+    let flights: [number, number][] = []; // voli reali [lng, lat]
     let land: { features: unknown[] } | null = null;
 
     const pointInPolygon = (pt: [number, number], poly: number[][]) => {
@@ -93,13 +96,23 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
       context.strokeStyle = "rgba(242,239,233,0.4)";
       context.lineWidth = 0.8 * s;
       context.stroke();
-      // puntini
+      // puntini delle terre
       for (const d of dots) {
         const p = projection([d.lng, d.lat]);
         if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
           context.beginPath();
           context.arc(p[0], p[1], 1.1 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#c9744a";
+          context.fillStyle = "#7a5238";
+          context.fill();
+        }
+      }
+      // voli reali (OpenSky) — puntini caldi e luminosi
+      for (const [lng, lat] of flights) {
+        const p = projection([lng, lat]);
+        if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
+          context.beginPath();
+          context.arc(p[0], p[1], 1.7 * s, 0, 2 * Math.PI);
+          context.fillStyle = "#f0a36a";
           context.fill();
         }
       }
@@ -164,8 +177,25 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
     canvas.addEventListener("wheel", onWheel, { passive: false });
     load();
 
+    // voli reali live (OpenSky via Worker), aggiornati ogni 30s
+    const loadFlights = async () => {
+      try {
+        const r = await fetch(`${WORKER_URL}/api/flights`);
+        if (!r.ok) return;
+        const j = (await r.json()) as { flights?: [number, number][] };
+        flights = j.flights ?? [];
+        setFlightCount(flights.length);
+        render();
+      } catch {
+        /* ignora: il globo resta comunque */
+      }
+    };
+    loadFlights();
+    const flightTimer = setInterval(loadFlights, 30000);
+
     return () => {
       t.stop();
+      clearInterval(flightTimer);
       canvas.removeEventListener("mousedown", onDown);
       canvas.removeEventListener("wheel", onWheel);
     };
@@ -177,7 +207,10 @@ export default function WhyEarth({ className = "" }: { className?: string }) {
       {loading && !error && <div className="mono absolute text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
       {error && <div className="mono absolute text-[0.6rem] text-signal-soft">{error}</div>}
       <div className="mono pointer-events-none absolute bottom-4 left-4 text-[0.5rem] text-faint">
-        TRASCINA PER RUOTARE · SCROLL PER ZOOM
+        TRASCINA · ZOOM
+        {flightCount > 0 && (
+          <span className="text-ember"> · ✈ {flightCount.toLocaleString("it-IT")} VOLI LIVE</span>
+        )}
       </div>
     </div>
   );

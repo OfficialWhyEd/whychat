@@ -629,6 +629,29 @@ Concreto, niente disclaimer inutili.`;
   return json({ prediction: text, thoughts }, 200, cors);
 }
 
+// ── /api/flights — voli reali per WhyEarth (OpenSky, senza chiave) ────────────
+async function handleFlights(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  try {
+    // adsb.lol: aviazione live keyless. /v2/mil = aerei militari globali (set reale).
+    const upstream = await fetch("https://api.adsb.lol/v2/mil", {
+      headers: { "User-Agent": "WhyChat/1.0 (whyed)", Accept: "application/json" },
+    });
+    if (!upstream.ok) throw new Error(`adsb ${upstream.status}`);
+    const data = (await upstream.json()) as { ac?: { lat?: number; lon?: number }[] };
+    const flights: [number, number][] = [];
+    for (const a of data.ac ?? []) {
+      if (typeof a.lon === "number" && typeof a.lat === "number") {
+        flights.push([Math.round(a.lon * 100) / 100, Math.round(a.lat * 100) / 100]);
+        if (flights.length >= 4000) break;
+      }
+    }
+    return json({ flights }, 200, { ...cors, "Cache-Control": "public, max-age=20" });
+  } catch (e) {
+    return json({ error: "voli non disponibili", detail: String(e).slice(0, 120) }, 502, cors);
+  }
+}
+
 // ── DREAMING — WhyChat sogna le conversazioni del giorno (cron 03:00) ─────────
 async function callGemini(env: Env, systemText: string, userText: string): Promise<string> {
   const data = await geminiGenerate(env, {
@@ -744,6 +767,7 @@ export default {
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);
       if (url.pathname === "/api/group/predict" && req.method === "POST") return await handleGroupPredict(req, env, ctx);
       if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);
+      if (url.pathname === "/api/flights" && req.method === "GET") return await handleFlights(req, env);
       if (url.pathname === "/api/vault" && req.method === "GET") return await handleVault(req, env);
       // trigger manuale del sogno (solo admin) — per testare senza aspettare le 03:00
       if (url.pathname === "/api/dream/run" && req.method === "POST") {
