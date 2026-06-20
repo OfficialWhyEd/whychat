@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { seeSheet, type ChatMessage as ApiMsg } from "../lib/api";
+import ChatMessageView from "./ChatMessage";
 
 /**
  * BlankSheet — la modalità OnlyType (beta): un foglio bianco dove fai quello che
@@ -297,7 +298,11 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
 
       {/* il foglio (canvas + strumenti) — display:none quando a tendina, così il
           disegno resta in memoria e non si perde */}
-      <div className={collapsed ? "hidden" : "flex min-h-0 flex-[3] flex-col gap-2"}>
+      <div
+        className={`flex min-h-0 flex-[3] flex-col gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[450ms] ease-out ${
+          collapsed ? "pointer-events-none max-h-0 -translate-y-1 opacity-0" : "max-h-[1200px] translate-y-0 opacity-100"
+        }`}
+      >
         <div ref={wrapRef} className="glass relative flex-1 overflow-hidden rounded-3xl">
           {onExit && (
             <button
@@ -438,24 +443,23 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
           {chat.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center">
               <p className="mono text-[0.55rem] leading-relaxed text-faint">
-                BUTTA GIÙ UNO SKETCH, POI CHIEDI A WHYCHAT
+                DISEGNA QUELLO CHE VUOI, POI CHIEDI A WHYCHAT
                 <br />
-                LUI GUARDA IL FOGLIO E LO RACCONTA IN PAROLE
+                LUI CAPISCE LO SKETCH E LO CREA DAVVERO (SITO · SVG · GIOCO · CALCOLO)
               </p>
             </div>
           ) : (
-            <div className="mx-auto flex max-w-2xl flex-col gap-2 px-1 py-1">
-              {chat.map((m) => (
-                <div
+            <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 py-1">
+              {chat.map((m, i) => (
+                <ChatMessageView
                   key={m.id}
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                    m.role === "user"
-                      ? "self-end bg-[rgba(201,75,37,0.16)] text-paper"
-                      : "glass self-start text-paper/90"
-                  }`}
-                >
-                  {m.content || <span className="text-faint">…</span>}
-                </div>
+                  msg={{
+                    id: String(m.id),
+                    role: m.role,
+                    content: m.content,
+                    streaming: busy && i === chat.length - 1 && m.role === "assistant",
+                  }}
+                />
               ))}
             </div>
           )}

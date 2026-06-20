@@ -619,7 +619,11 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
   const systemText =
     SOUL + BEHAVIOR + nowContext() +
     (name ? `\n\n[Parli con: ${name}]` : "") +
-    `\n\n[MODALITÀ ONLYTYPE — VISIONE] Stai guardando il foglio della persona (disegno + scritte a mano). Rappresenta in PAROLE ciò che vedi: leggi lo sketch, cogli l'idea dietro al segno, dai forma a quello che sta cercando di esprimere. Se è l'inizio di un'idea o di un programma, aiutalo a svilupparla. Se è vuoto o illeggibile, dillo con leggerezza e invitalo a buttare giù un segno. Concreto e vivo, niente elenchi freddi.`;
+    `\n\n[MODALITÀ ONLYTYPE — DISEGNO→CREAZIONE] Il foglio è un PROMPT VISIVO: la persona schizza/scrive un'idea e tu la REALIZZI davvero, non la descrivi. Capisci cosa ha disegnato (un layout di sito, un'interfaccia, un personaggio, un diagramma, un'icona, un'equazione, un calcolo, l'idea di un gioco…) e con un ragionamento serio PRODUCI il risultato finito.
+- Se è UI / sito / gioco / visualizzazione / diagramma → emetti un artifact \`\`\`whyart (HTML+CSS+JS autosufficiente, estetica WhyEd dark) che lo costruisce DAVVERO e funzionante.
+- Se è un disegno / forma / logo → un artifact \`\`\`whyart con un SVG pulito che lo ricrea.
+- Se è un'equazione, un calcolo o una formula → risolvilo passo-passo e dai il risultato netto.
+- Una riga per dire cosa hai capito dallo sketch, POI crea. Se il foglio è troppo vago, fa' UNA domanda secca ma proponi comunque una prima versione. Mai limitarti a descrivere: qui si COSTRUISCE.`;
 
   const reqBody = JSON.stringify({
     systemInstruction: { parts: [{ text: systemText }] },
