@@ -12,6 +12,7 @@
  */
 
 import { SOUL, WHYCHAT_DREAM } from "./persona";
+import { BEHAVIOR } from "./behavior";
 
 export interface Env {
   GROQ_API_KEY: string;
@@ -380,6 +381,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const systemText =
     SOUL +
+    BEHAVIOR +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
     modeHint +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
@@ -621,7 +623,7 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
   }));
 
   const payloadBase = {
-    systemInstruction: { parts: [{ text: SOUL + (name ? `\n\n[Parli con: ${name}]` : "") }] },
+    systemInstruction: { parts: [{ text: SOUL + BEHAVIOR + (name ? `\n\n[Parli con: ${name}]` : "") }] },
     contents,
     generationConfig: {
       temperature: 0.9,
