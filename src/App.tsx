@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
-import GroupChat from "./components/GroupChat";
+import GroupChat, { type GroupSession } from "./components/GroupChat";
 import WhyEarth from "./components/WhyEarth";
 import WhyEntropy from "./components/WhyEntropy";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
@@ -57,6 +57,9 @@ function Chat() {
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Sessione gruppo: vive tra le conversazioni come tutte le altre.
+  const groupIdRef = useRef<string | null>(null);
+  const [groupHydra, setGroupHydra] = useState<{ key: number; session?: GroupSession }>({ key: 0 });
   // Sei "attaccato" al fondo? Se hai scrollato su per rileggere, NON ti strappiamo giù.
   const [atBottom, setAtBottom] = useState(true);
   const atBottomRef = useRef(true);
@@ -96,6 +99,25 @@ function Chat() {
     setAtBottom(true);
     requestAnimationFrame(() => scrollToBottom("auto"));
   }, [activeId, scrollToBottom]);
+
+  // Salva/aggiorna la sessione gruppo nelle conversazioni (upsert su id stabile).
+  const persistGroup = useCallback((s: GroupSession) => {
+    const title = titleFrom(s.topic || s.items.find((i) => !i.who)?.content || "Group Prediction");
+    setChats((prev) => {
+      let id = groupIdRef.current;
+      let next: Chat[];
+      if (id && prev.some((c) => c.id === id)) {
+        next = prev.map((c) => (c.id === id ? { ...c, ts: Date.now(), title, mode: "group", payload: s } : c));
+      } else {
+        id = newChatId();
+        groupIdRef.current = id;
+        next = [{ id, title, ts: Date.now(), mode: "group", messages: [], payload: s }, ...prev];
+      }
+      saveChats(next);
+      return next;
+    });
+    if (groupIdRef.current) setActiveId(groupIdRef.current);
+  }, []);
 
   const send = async (text: string, modeOverride?: Mode) => {
     if (streaming) return;
@@ -226,6 +248,10 @@ function Chat() {
   const newChat = () => {
     if (streaming) return;
     setActiveId(null);
+    if (mode === "group") {
+      groupIdRef.current = null;
+      setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
+    }
     closeSidebarIfMobile();
     setError("");
   };
@@ -233,6 +259,10 @@ function Chat() {
     const c = chats.find((x) => x.id === cid);
     setActiveId(cid);
     if (c?.mode) setMode(c.mode); // la chat continua nella sua modalità
+    if (c?.mode === "group") {
+      groupIdRef.current = cid;
+      setGroupHydra((h) => ({ key: h.key + 1, session: c.payload as GroupSession }));
+    }
     closeSidebarIfMobile();
     setError("");
   };
@@ -241,6 +271,10 @@ function Chat() {
     setChats(next);
     saveChats(next);
     if (cid === activeId) setActiveId(null);
+    if (cid === groupIdRef.current) {
+      groupIdRef.current = null;
+      if (mode === "group") setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
+    }
   };
   // Cambiare modalità mentre una chat è in corso NON la tocca (resta legata alla
   // sua): apre una nuova conversazione nella modalità scelta, come Claude/ChatGPT.
@@ -250,6 +284,11 @@ function Chat() {
     if (active && active.messages.length > 0 && m !== (active.mode ?? "chat")) {
       setActiveId(null);
       setError("");
+    }
+    if (m === "group") {
+      const isGroup = active?.mode === "group";
+      groupIdRef.current = isGroup ? active!.id : null;
+      setGroupHydra((h) => ({ key: h.key + 1, session: isGroup ? (active!.payload as GroupSession) : undefined }));
     }
   };
   const askName = () => {
@@ -305,7 +344,12 @@ function Chat() {
         {/* Area centrale */}
         {group ? (
           <main className="min-h-0 flex-1">
-            <GroupChat onExit={() => setMode("chat")} />
+            <GroupChat
+              key={groupHydra.key}
+              session={groupHydra.session}
+              onPersist={persistGroup}
+              onExit={() => setMode("chat")}
+            />
           </main>
         ) : earth ? (
           <main className="min-h-0 flex-1">

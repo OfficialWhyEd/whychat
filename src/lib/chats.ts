@@ -7,6 +7,9 @@ export interface Chat {
   ts: number;
   mode?: Mode; // la modalità in cui è nata: la chat continua in questa
   messages: Message[];
+  // sessione delle modalità che NON usano i messaggi (group, sheet): serializzata
+  // qui così anche loro vivono tra le conversazioni e si possono riaprire.
+  payload?: unknown;
 }
 
 const LS_KEY = "whychat_chats_v1";

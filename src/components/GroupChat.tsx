@@ -14,17 +14,30 @@ import { GlowCard } from "./GlowCard";
 type Item = { who: GroupAgentMeta | null; content: string }; // who null = utente
 type Phase = "intro" | "running" | "waiting" | "predicting" | "done";
 
+// Sessione serializzabile: vive tra le conversazioni, si riapre dalla sidebar.
+export interface GroupSession {
+  topic: string;
+  items: Item[];
+  prediction: DeepResult | null;
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const toMsgs = (items: Item[]): GroupMsg[] => items.map((i) => ({ agent: i.who ? i.who.id : "user", content: i.content }));
 
-export default function GroupChat({ onExit }: { onExit: () => void }) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [phase, setPhase] = useState<Phase>("intro");
+interface Props {
+  onExit: () => void;
+  session?: GroupSession;
+  onPersist?: (s: GroupSession) => void;
+}
+
+export default function GroupChat({ onExit, session, onPersist }: Props) {
+  const [items, setItems] = useState<Item[]>(session?.items ?? []);
+  const [phase, setPhase] = useState<Phase>(session ? (session.prediction ? "done" : "waiting") : "intro");
   const [typing, setTyping] = useState<GroupAgentMeta | null>(null);
-  const [prediction, setPrediction] = useState<DeepResult | null>(null);
+  const [prediction, setPrediction] = useState<DeepResult | null>(session?.prediction ?? null);
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
-  const topicRef = useRef("");
+  const topicRef = useRef(session?.topic ?? "");
   const bottomRef = useRef<HTMLDivElement>(null);
   const aliveRef = useRef(true);
 
@@ -34,6 +47,14 @@ export default function GroupChat({ onExit }: { onExit: () => void }) {
       aliveRef.current = false;
     };
   }, []);
+
+  // Salva la sessione tra le conversazioni a ogni passo (nuova battuta o predizione).
+  useEffect(() => {
+    if (!onPersist) return;
+    if (items.length === 0 && !prediction) return;
+    onPersist({ topic: topicRef.current, items, prediction });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, prediction]);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [items, typing, phase]);
