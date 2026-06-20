@@ -8,8 +8,9 @@ import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "./components/Sidebar";
+import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
@@ -54,6 +55,10 @@ function Chat() {
   }, [sidebar]);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Sei "attaccato" al fondo? Se hai scrollato su per rileggere, NON ti strappiamo giù.
+  const [atBottom, setAtBottom] = useState(true);
+  const atBottomRef = useRef(true);
 
   const active = chats.find((c) => c.id === activeId) ?? null;
   const messages = active?.messages ?? [];
@@ -62,13 +67,33 @@ function Chat() {
   const group = mode === "group";
   const earth = mode === "earth";
 
-  const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+    else bottomRef.current?.scrollIntoView({ behavior, block: "end" });
   }, []);
 
+  // Aggiorna "sei in fondo?" mentre scrolli a mano (soglia 120px).
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    atBottomRef.current = near;
+    setAtBottom((p) => (p === near ? p : near));
+  }, []);
+
+  // Durante lo streaming resta incollato SOLO se eri già in fondo. Istantaneo per non
+  // litigare con lo smooth ad ogni token.
   useEffect(() => {
-    if (streaming) scrollToBottom();
+    if (streaming && atBottomRef.current) scrollToBottom("auto");
   }, [messages, streaming, scrollToBottom]);
+
+  // Aprendo/cambiando chat parti dall'ultimo messaggio.
+  useEffect(() => {
+    atBottomRef.current = true;
+    setAtBottom(true);
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [activeId, scrollToBottom]);
 
   const send = async (text: string, modeOverride?: Mode) => {
     if (streaming) return;
@@ -97,7 +122,9 @@ function Chat() {
     saveChats(nextChats);
     setActiveId(id);
     setStreaming(true);
-    requestAnimationFrame(scrollToBottom);
+    atBottomRef.current = true;
+    setAtBottom(true);
+    requestAnimationFrame(() => scrollToBottom("smooth"));
 
     const history: ApiMsg[] = [...baseMessages, userMsg].map((m) => ({ role: m.role, content: m.content }));
 
@@ -289,7 +316,7 @@ function Chat() {
             </div>
           </main>
         ) : (
-          <main className="scroll-thin relative flex-1 overflow-y-auto">
+          <main ref={scrollRef} onScroll={onScroll} className="scroll-thin relative flex-1 overflow-y-auto">
             <div className="mx-auto max-w-2xl px-4 py-6">
               {empty ? (
                 <Hero onPick={send} />
@@ -318,7 +345,20 @@ function Chat() {
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
         <footer className={`px-4 pb-4 pt-2 ${group ? "hidden" : ""}`}>
-          <div className="mx-auto max-w-2xl">
+          <div className="relative mx-auto max-w-2xl">
+            <AnimatePresence>
+              {!atBottom && !empty && !sheet && !earth && (
+                <JumpToBottom
+                  key="jump"
+                  live={streaming}
+                  onClick={() => {
+                    atBottomRef.current = true;
+                    setAtBottom(true);
+                    scrollToBottom("smooth");
+                  }}
+                />
+              )}
+            </AnimatePresence>
             <CommandComposer
               onSend={send}
               disabled={busy}
