@@ -7,7 +7,7 @@ import WhyEarth from "./components/WhyEarth";
 import WhyEntropy from "./components/WhyEntropy";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
-import BlankSheet from "./components/BlankSheet";
+import BlankSheet, { type SheetSession } from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
 import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "./components/Sidebar";
@@ -60,6 +60,9 @@ function Chat() {
   // Sessione gruppo: vive tra le conversazioni come tutte le altre.
   const groupIdRef = useRef<string | null>(null);
   const [groupHydra, setGroupHydra] = useState<{ key: number; session?: GroupSession }>({ key: 0 });
+  // Stessa cosa per il foglio OnlyType.
+  const sheetIdRef = useRef<string | null>(null);
+  const [sheetHydra, setSheetHydra] = useState<{ key: number; session?: SheetSession }>({ key: 0 });
   // Sei "attaccato" al fondo? Se hai scrollato su per rileggere, NON ti strappiamo giù.
   const [atBottom, setAtBottom] = useState(true);
   const atBottomRef = useRef(true);
@@ -117,6 +120,28 @@ function Chat() {
       return next;
     });
     if (groupIdRef.current) setActiveId(groupIdRef.current);
+  }, []);
+
+  // Salva/aggiorna il foglio OnlyType tra le conversazioni.
+  const persistSheet = useCallback((s: SheetSession) => {
+    const hasContent = !!s.image || s.texts.some((t) => t.value.trim());
+    if (!hasContent && !sheetIdRef.current) return; // foglio vuoto: non creare nulla
+    const firstText = s.texts.find((t) => t.value.trim())?.value;
+    const title = titleFrom(firstText || "Foglio OnlyType");
+    setChats((prev) => {
+      let id = sheetIdRef.current;
+      let next: Chat[];
+      if (id && prev.some((c) => c.id === id)) {
+        next = prev.map((c) => (c.id === id ? { ...c, ts: Date.now(), title, mode: "sheet", payload: s } : c));
+      } else {
+        id = newChatId();
+        sheetIdRef.current = id;
+        next = [{ id, title, ts: Date.now(), mode: "sheet", messages: [], payload: s }, ...prev];
+      }
+      saveChats(next);
+      return next;
+    });
+    if (sheetIdRef.current) setActiveId(sheetIdRef.current);
   }, []);
 
   const send = async (text: string, modeOverride?: Mode) => {
@@ -252,6 +277,10 @@ function Chat() {
       groupIdRef.current = null;
       setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
     }
+    if (mode === "sheet") {
+      sheetIdRef.current = null;
+      setSheetHydra((h) => ({ key: h.key + 1, session: undefined }));
+    }
     closeSidebarIfMobile();
     setError("");
   };
@@ -262,6 +291,10 @@ function Chat() {
     if (c?.mode === "group") {
       groupIdRef.current = cid;
       setGroupHydra((h) => ({ key: h.key + 1, session: c.payload as GroupSession }));
+    }
+    if (c?.mode === "sheet") {
+      sheetIdRef.current = cid;
+      setSheetHydra((h) => ({ key: h.key + 1, session: c.payload as SheetSession }));
     }
     closeSidebarIfMobile();
     setError("");
@@ -274,6 +307,10 @@ function Chat() {
     if (cid === groupIdRef.current) {
       groupIdRef.current = null;
       if (mode === "group") setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
+    }
+    if (cid === sheetIdRef.current) {
+      sheetIdRef.current = null;
+      if (mode === "sheet") setSheetHydra((h) => ({ key: h.key + 1, session: undefined }));
     }
   };
   // Cambiare modalità mentre una chat è in corso NON la tocca (resta legata alla
@@ -289,6 +326,11 @@ function Chat() {
       const isGroup = active?.mode === "group";
       groupIdRef.current = isGroup ? active!.id : null;
       setGroupHydra((h) => ({ key: h.key + 1, session: isGroup ? (active!.payload as GroupSession) : undefined }));
+    }
+    if (m === "sheet") {
+      const isSheet = active?.mode === "sheet";
+      sheetIdRef.current = isSheet ? active!.id : null;
+      setSheetHydra((h) => ({ key: h.key + 1, session: isSheet ? (active!.payload as SheetSession) : undefined }));
     }
   };
   const askName = () => {
@@ -362,7 +404,7 @@ function Chat() {
         ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
             <div className="mx-auto h-full max-w-4xl">
-              <BlankSheet />
+              <BlankSheet key={sheetHydra.key} session={sheetHydra.session} onPersist={persistSheet} />
             </div>
           </main>
         ) : (

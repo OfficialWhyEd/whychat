@@ -17,7 +17,18 @@ interface TextNode {
   color: string;
 }
 
-export default function BlankSheet() {
+// Sessione serializzabile del foglio: disegno (dataURL) + testi. Vive tra le conversazioni.
+export interface SheetSession {
+  image: string | null;
+  texts: TextNode[];
+}
+
+interface Props {
+  session?: SheetSession;
+  onPersist?: (s: SheetSession) => void;
+}
+
+export default function BlankSheet({ session, onPersist }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
@@ -26,8 +37,28 @@ export default function BlankSheet() {
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(COLORS[1]);
   const [size, setSize] = useState(3);
-  const [texts, setTexts] = useState<TextNode[]>([]);
-  const nextId = useRef(1);
+  const [texts, setTexts] = useState<TextNode[]>(session?.texts ?? []);
+  const nextId = useRef((session?.texts?.reduce((m, t) => Math.max(m, t.id), 0) ?? 0) + 1);
+
+  // mirror dei testi per leggerli aggiornati dentro il timer di salvataggio
+  const textsRef = useRef(texts);
+  textsRef.current = texts;
+  const persistTimer = useRef<number | undefined>(undefined);
+  // salva (debounced) disegno + testi tra le conversazioni
+  const schedulePersist = () => {
+    if (!onPersist) return;
+    clearTimeout(persistTimer.current);
+    persistTimer.current = window.setTimeout(() => {
+      const c = canvasRef.current;
+      let image: string | null = null;
+      try {
+        if (c) image = c.toDataURL("image/png");
+      } catch {
+        image = null;
+      }
+      onPersist({ image, texts: textsRef.current });
+    }, 700);
+  };
 
   // diametro del pennello in px-schermo: la gomma è 6× lo spessore, come nel disegno.
   // È lo stesso valore usato in onMove → il cerchio mostra ESATTAMENTE l'area che tocchi.
@@ -68,6 +99,24 @@ export default function BlankSheet() {
     return () => window.removeEventListener("resize", fit);
   }, []);
 
+  // ripristina il disegno salvato (una volta, dopo che il canvas è stato dimensionato)
+  useEffect(() => {
+    if (!session?.image) return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const img = new Image();
+    img.onload = () => {
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
+    };
+    img.src = session.image;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const pos = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -78,11 +127,16 @@ export default function BlankSheet() {
       const { x, y } = pos(e);
       const id = nextId.current++;
       setTexts((t) => [...t, { id, x, y, value: "", color }]);
+      schedulePersist();
       return;
     }
     drawing.current = true;
     last.current = pos(e);
-    (e.target as Element).setPointerCapture(e.pointerId);
+    try {
+      (e.target as Element).setPointerCapture(e.pointerId);
+    } catch {
+      /* puntatore sintetico/non valido: il disegno funziona comunque */
+    }
   };
 
   const onMove = (e: React.PointerEvent) => {
@@ -101,13 +155,16 @@ export default function BlankSheet() {
   };
 
   const onUp = () => {
+    const was = drawing.current;
     drawing.current = false;
+    if (was) schedulePersist();
   };
 
   const clearAll = () => {
     const c = canvasRef.current!;
     c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
     setTexts([]);
+    schedulePersist();
   };
 
   return (
@@ -149,11 +206,13 @@ export default function BlankSheet() {
             key={t.id}
             autoFocus
             value={t.value}
-            onChange={(e) =>
-              setTexts((arr) => arr.map((n) => (n.id === t.id ? { ...n, value: e.target.value } : n)))
-            }
+            onChange={(e) => {
+              setTexts((arr) => arr.map((n) => (n.id === t.id ? { ...n, value: e.target.value } : n)));
+              schedulePersist();
+            }}
             onBlur={() => {
               if (!t.value.trim()) setTexts((arr) => arr.filter((n) => n.id !== t.id));
+              schedulePersist();
             }}
             placeholder="scrivi…"
             className="absolute resize-none overflow-hidden bg-transparent text-[1.5rem] leading-tight outline-none placeholder:text-faint/40"

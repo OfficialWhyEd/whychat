@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "vitest run",
     "worker:dev": "wrangler dev worker/index.ts",
     "worker:deploy": "wrangler deploy"
   },
@@ -29,6 +30,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
+    "vitest": "^4.1.9",
     "wrangler": "^3.90.0"
   }
 }
