@@ -6,3 +6,7 @@ dist
 .dev.vars
 .env
 .vscode
+
+# dump sessioni con chiavi in chiaro — MAI nel repo
+SESSIONE_PRECEDENTE_MESSAGGI.md
+*SESSIONE*.md
