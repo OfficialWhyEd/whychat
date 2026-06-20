@@ -1,221 +1,282 @@
-import { useEffect, useRef, useState } from "react";
-import { geoOrthographic, geoPath, geoGraticule, geoBounds } from "d3-geo";
-import { timer } from "d3-timer";
+import { useEffect, useRef, useState, useCallback } from "react";
+import createGlobe from "cobe";
+import { motion, AnimatePresence } from "framer-motion";
 
 /**
- * WhyEarth — globo terrestre a puntini, dark e nei colori del brand. Ruota da
- * solo, trascini per girarlo, scroll per zoom. (Adattato da un componente d3.)
- * Base per la modalità WhyEarth: il mondo al centro, interattivo.
+ * WhyEarth — il mondo al centro, interattivo. Globo a puntini (cobe/WebGL) nei
+ * colori del brand: ruota da solo, lo trascini, e CERCHI un luogo: geocoding
+ * keyless (open-meteo) → un marcatore cade e il globo ci gira sopra. In più i
+ * terremoti reali delle ultime 24h (USGS) come marcatori vivi.
  */
-export default function WhyEarth({ className = "" }: { className?: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [quakeCount, setQuakeCount] = useState(0);
 
+type Marker = { id: string; location: [number, number]; size: number; kind: "place" | "quake" };
+type Place = { name: string; country: string; lat: number; lng: number };
+
+export default function WhyEarth() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const markersRef = useRef<Marker[]>([]);
+  const [quakeCount, setQuakeCount] = useState(0);
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [place, setPlace] = useState<Place | null>(null);
+  const [hint, setHint] = useState("");
+  const [recent, setRecent] = useState<Place[]>([]);
+
+  // controllo rotazione (radianti)
+  const phi = useRef(0);
+  const theta = useRef(0.2);
+  const targetPhi = useRef<number | null>(null);
+  const targetTheta = useRef<number | null>(null);
+  const hold = useRef(false); // resta fermo sul luogo cercato finché non interagisci
+  const drag = useRef<{ x: number; y: number; phi: number; theta: number } | null>(null);
+
+  // porta una posizione [lat,lng] davanti e ci resta
+  const focus = useCallback((lat: number, lng: number) => {
+    targetPhi.current = -(lng * Math.PI) / 180 - Math.PI / 2;
+    targetTheta.current = Math.max(-0.45, Math.min(0.45, (lat * Math.PI) / 180));
+    hold.current = true;
+  }, []);
+
+  const dropPlace = useCallback(
+    (p: Place) => {
+      setPlace(p);
+      markersRef.current = [
+        { id: "place", location: [p.lat, p.lng], size: 0.09, kind: "place" },
+        ...markersRef.current.filter((m) => m.kind === "quake"),
+      ];
+      focus(p.lat, p.lng);
+    },
+    [focus],
+  );
+
+  const search = useCallback(async () => {
+    const q = query.trim();
+    if (!q || busy) return;
+    setBusy(true);
+    setHint("");
+    try {
+      const r = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=it&format=json`,
+      );
+      const j = (await r.json()) as { results?: { latitude: number; longitude: number; name: string; country?: string }[] };
+      const hit = j.results?.[0];
+      if (!hit) {
+        setHint("Nessun luogo trovato.");
+        return;
+      }
+      const p: Place = { name: hit.name, country: hit.country ?? "", lat: hit.latitude, lng: hit.longitude };
+      setRecent((prev) => [p, ...prev.filter((x) => x.name !== p.name)].slice(0, 5));
+      dropPlace(p);
+    } catch {
+      setHint("Ricerca non disponibile ora.");
+    } finally {
+      setBusy(false);
+    }
+  }, [query, busy, dropPlace]);
+
+  // globo cobe
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+    let globe: ReturnType<typeof createGlobe> | null = null;
+    let raf = 0;
 
-    const parent = canvas.parentElement;
-    const W = Math.min(parent?.clientWidth ?? 800, window.innerWidth);
-    const H = Math.min(parent?.clientHeight ?? 600, window.innerHeight);
-    const radius = Math.min(W, H) / 2.4;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width = `${W}px`;
-    canvas.style.height = `${H}px`;
-    context.scale(dpr, dpr);
-
-    const projection = geoOrthographic().scale(radius).translate([W / 2, H / 2]).clipAngle(90);
-    const path = geoPath(projection, context);
-
-    type Dot = { lng: number; lat: number };
-    const dots: Dot[] = [];
-    let quakes: [number, number, number][] = []; // terremoti reali [lng, lat, mag]
-    let land: { features: unknown[] } | null = null;
-
-    const pointInPolygon = (pt: [number, number], poly: number[][]) => {
-      const [x, y] = pt;
-      let inside = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const [xi, yi] = poly[i];
-        const [xj, yj] = poly[j];
-        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-      }
-      return inside;
-    };
-    const inFeature = (pt: [number, number], f: { geometry: { type: string; coordinates: number[][][] | number[][][][] } }) => {
-      const g = f.geometry;
-      if (g.type === "Polygon") {
-        const c = g.coordinates as number[][][];
-        if (!pointInPolygon(pt, c[0])) return false;
-        for (let i = 1; i < c.length; i++) if (pointInPolygon(pt, c[i])) return false;
-        return true;
-      }
-      if (g.type === "MultiPolygon") {
-        for (const poly of g.coordinates as number[][][][]) {
-          if (pointInPolygon(pt, poly[0])) {
-            let hole = false;
-            for (let i = 1; i < poly.length; i++) if (pointInPolygon(pt, poly[i])) hole = true;
-            if (!hole) return true;
+    const start = () => {
+      const w = canvas.offsetWidth;
+      if (!w || globe) return;
+      globe = createGlobe(canvas, {
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        width: w * 2,
+        height: w * 2,
+        phi: 0,
+        theta: 0.2,
+        dark: 1,
+        diffuse: 1.2,
+        mapSamples: 16000,
+        mapBrightness: 5.2,
+        baseColor: [0.32, 0.22, 0.16], // terra calda scura
+        markerColor: [0.85, 0.36, 0.18], // cremisi/ambra
+        glowColor: [0.22, 0.15, 0.11], // alone caldo discreto
+        opacity: 0.95,
+        markers: [],
+      });
+      // cobe v2: il loop di rendering lo guidiamo noi con update()
+      const tick = () => {
+        if (!drag.current) {
+          if (targetPhi.current !== null) {
+            phi.current += (targetPhi.current - phi.current) * 0.08;
+            theta.current += ((targetTheta.current ?? theta.current) - theta.current) * 0.08;
+            if (Math.abs(targetPhi.current - phi.current) < 0.002) targetPhi.current = null;
+          } else if (!hold.current) {
+            phi.current += 0.0035; // auto-rotazione (a meno che tieni un luogo)
           }
         }
-      }
-      return false;
+        globe!.update({
+          phi: phi.current,
+          theta: theta.current,
+          markers: markersRef.current.map((m) => ({ location: m.location, size: m.size })),
+        });
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      requestAnimationFrame(() => (canvas.style.opacity = "1"));
     };
 
-    const rotation: [number, number] = [0, -15];
-    let auto = true;
-
-    const render = () => {
-      context.clearRect(0, 0, W, H);
-      const s = projection.scale() / radius;
-      // oceano
-      context.beginPath();
-      context.arc(W / 2, H / 2, projection.scale(), 0, 2 * Math.PI);
-      context.fillStyle = "#0a0908";
-      context.fill();
-      context.strokeStyle = "rgba(242,239,233,0.45)";
-      context.lineWidth = 1.5 * s;
-      context.stroke();
-      if (!land) return;
-      // graticule
-      context.beginPath();
-      path(geoGraticule()());
-      context.strokeStyle = "rgba(242,239,233,0.16)";
-      context.lineWidth = 0.6 * s;
-      context.stroke();
-      // terre
-      context.beginPath();
-      for (const f of land.features) path(f as Parameters<typeof path>[0]);
-      context.strokeStyle = "rgba(242,239,233,0.4)";
-      context.lineWidth = 0.8 * s;
-      context.stroke();
-      // puntini delle terre
-      for (const d of dots) {
-        const p = projection([d.lng, d.lat]);
-        if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
-          context.beginPath();
-          context.arc(p[0], p[1], 1.1 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#7a5238";
-          context.fill();
+    if (canvas.offsetWidth > 0) start();
+    else {
+      const ro = new ResizeObserver((e) => {
+        if (e[0]?.contentRect.width > 0) {
+          ro.disconnect();
+          start();
         }
-      }
-      // terremoti reali (USGS, ultime 24h) — grandezza per magnitudo
-      for (const [lng, lat, mag] of quakes) {
-        const p = projection([lng, lat]);
-        if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
-          const r = Math.max(1.3, (mag + 1) * 1.05) * s;
-          context.beginPath();
-          context.arc(p[0], p[1], r, 0, 2 * Math.PI);
-          context.fillStyle = mag >= 4 ? "#c94b25" : "#f0a36a";
-          context.globalAlpha = 0.85;
-          context.fill();
-          context.globalAlpha = 1;
-        }
-      }
+      });
+      ro.observe(canvas);
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      globe?.destroy();
     };
+  }, []);
 
+  // drag per ruotare a mano
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const down = (e: PointerEvent) => {
+      drag.current = { x: e.clientX, y: e.clientY, phi: phi.current, theta: theta.current };
+      targetPhi.current = null;
+      canvas.style.cursor = "grabbing";
+    };
+    const move = (e: PointerEvent) => {
+      if (!drag.current) return;
+      phi.current = drag.current.phi + (e.clientX - drag.current.x) / 200;
+      theta.current = Math.max(-0.7, Math.min(0.7, drag.current.theta + (e.clientY - drag.current.y) / 200));
+    };
+    const up = () => {
+      drag.current = null;
+      canvas.style.cursor = "grab";
+    };
+    canvas.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move, { passive: true });
+    window.addEventListener("pointerup", up);
+    return () => {
+      canvas.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, []);
+
+  // terremoti reali (USGS, 24h) come marcatori vivi
+  useEffect(() => {
     const load = async () => {
-      try {
-        const res = await fetch(
-          "https://raw.githubusercontent.com/martynafford/natural-earth-geojson/refs/heads/master/110m/physical/ne_110m_land.json",
-        );
-        if (!res.ok) throw new Error("land");
-        land = await res.json();
-        for (const f of land!.features as { geometry: { type: string; coordinates: number[][][] | number[][][][] } }[]) {
-          const [[minLng, minLat], [maxLng, maxLat]] = geoBounds(f as Parameters<typeof geoBounds>[0]);
-          const step = 1.3;
-          for (let lng = minLng; lng <= maxLng; lng += step)
-            for (let lat = minLat; lat <= maxLat; lat += step)
-              if (inFeature([lng, lat], f)) dots.push({ lng, lat });
-        }
-        render();
-        setLoading(false);
-      } catch {
-        setError("Mappa del mondo non disponibile.");
-        setLoading(false);
-      }
-    };
-
-    const t = timer(() => {
-      if (auto) {
-        rotation[0] += 0.22;
-        projection.rotate(rotation);
-        render();
-      }
-    });
-
-    const onDown = (e: MouseEvent) => {
-      auto = false;
-      const sx = e.clientX;
-      const sy = e.clientY;
-      const sr: [number, number] = [rotation[0], rotation[1]];
-      const move = (m: MouseEvent) => {
-        rotation[0] = sr[0] + (m.clientX - sx) * 0.4;
-        rotation[1] = Math.max(-90, Math.min(90, sr[1] - (m.clientY - sy) * 0.4));
-        projection.rotate(rotation);
-        render();
-      };
-      const up = () => {
-        document.removeEventListener("mousemove", move);
-        document.removeEventListener("mouseup", up);
-        setTimeout(() => (auto = true), 1200);
-      };
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", up);
-    };
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const f = e.deltaY > 0 ? 0.92 : 1.08;
-      projection.scale(Math.max(radius * 0.6, Math.min(radius * 3, projection.scale() * f)));
-      render();
-    };
-    canvas.addEventListener("mousedown", onDown);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    load();
-
-    // terremoti reali live (USGS, ultime 24h) — keyless, CORS, browser-direct
-    const loadQuakes = async () => {
       try {
         const r = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
         if (!r.ok) return;
         const j = (await r.json()) as { features?: { geometry: { coordinates: number[] }; properties: { mag: number | null } }[] };
-        quakes = (j.features ?? []).map(
-          (f) => [f.geometry.coordinates[0], f.geometry.coordinates[1], f.properties.mag ?? 1] as [number, number, number],
-        );
-        setQuakeCount(quakes.length);
-        render();
+        const qs: Marker[] = (j.features ?? []).slice(0, 220).map((f, i) => ({
+          id: "q" + i,
+          location: [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number],
+          size: Math.max(0.02, ((f.properties.mag ?? 1) + 1) * 0.012),
+          kind: "quake",
+        }));
+        markersRef.current = [...markersRef.current.filter((m) => m.kind === "place"), ...qs];
+        setQuakeCount(qs.length);
       } catch {
-        /* ignora: il globo resta comunque */
+        /* il globo resta comunque */
       }
     };
-    loadQuakes();
-    const quakeTimer = setInterval(loadQuakes, 120000);
-
-    return () => {
-      t.stop();
-      clearInterval(quakeTimer);
-      canvas.removeEventListener("mousedown", onDown);
-      canvas.removeEventListener("wheel", onWheel);
-    };
+    load();
+    const t = setInterval(load, 120000);
+    return () => clearInterval(t);
   }, []);
 
   return (
-    <div className={`relative grid h-full w-full place-items-center ${className}`}>
-      <canvas ref={canvasRef} className="cursor-grab active:cursor-grabbing" />
-      {loading && !error && <div className="mono absolute text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
-      {error && <div className="mono absolute text-[0.6rem] text-signal-soft">{error}</div>}
-      <div className="mono pointer-events-none absolute bottom-4 left-4 text-[0.5rem] text-faint">
-        TRASCINA · ZOOM
-        {quakeCount > 0 && (
-          <span className="text-ember"> · ◉ {quakeCount.toLocaleString("it-IT")} TERREMOTI 24h</span>
-        )}
+    <div className="relative grid h-full w-full place-items-center overflow-hidden">
+      <div
+        className="pointer-events-none absolute h-[78vmin] w-[78vmin] rounded-full"
+        style={{ background: "radial-gradient(circle, rgba(201,75,37,0.12), transparent 62%)" }}
+      />
+      <canvas
+        ref={canvasRef}
+        className="aspect-square w-[min(78vmin,640px)] cursor-grab touch-none select-none"
+        style={{ opacity: 0, transition: "opacity 1s ease", maxWidth: "100%" }}
+      />
+
+      {/* ricerca */}
+      <div className="absolute left-1/2 top-5 w-[min(90%,420px)] -translate-x-1/2">
+        <div className="glass glass-sheen flex items-center gap-2 rounded-full px-2 py-1.5 pl-4">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-faint">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Cerca un luogo nel mondo…"
+            className="min-w-0 flex-1 bg-transparent text-[0.9rem] text-paper placeholder:text-faint focus:outline-none"
+          />
+          <motion.button
+            onClick={search}
+            disabled={busy || !query.trim()}
+            whileTap={{ scale: 0.92 }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[#0a0908] disabled:opacity-35"
+            style={{ background: "linear-gradient(180deg,#e0673f,#c94b25)" }}
+            title="Cerca"
+          >
+            {busy ? (
+              <motion.span
+                className="block h-3.5 w-3.5 rounded-full border-2 border-[#0a0908] border-t-transparent"
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 0.7, ease: "linear" }}
+              />
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="#0a0908" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </motion.button>
+        </div>
+        {hint && <p className="mono mt-2 text-center text-[0.55rem] text-signal-soft">{hint}</p>}
       </div>
+
+      {/* scheda luogo */}
+      <AnimatePresence>
+        {place && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="glass absolute right-5 top-20 w-[min(60%,230px)] rounded-2xl px-4 py-3"
+          >
+            <div className="mono text-[0.5rem] tracking-[0.18em] text-ember">LUOGO</div>
+            <div className="mt-0.5 text-[1rem] text-paper">{place.name}</div>
+            {place.country && <div className="text-[0.7rem] text-faint">{place.country}</div>}
+            <div className="mono mt-2 text-[0.5rem] text-dim">
+              {place.lat.toFixed(2)}°, {place.lng.toFixed(2)}°
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* HUD */}
+      <div className="mono pointer-events-none absolute bottom-4 left-4 flex flex-col gap-1 text-[0.5rem] text-faint">
+        <span>TRASCINA · CERCA UN LUOGO</span>
+        {quakeCount > 0 && <span className="text-ember">◉ {quakeCount.toLocaleString("it-IT")} TERREMOTI 24h</span>}
+      </div>
+      {recent.length > 0 && (
+        <div className="absolute bottom-4 right-4 flex max-w-[55%] flex-wrap justify-end gap-1.5">
+          {recent.map((p) => (
+            <button
+              key={p.name}
+              onClick={() => dropPlace(p)}
+              className="mono rounded-full border border-[var(--color-line2)] px-2.5 py-1 text-[0.5rem] text-faint transition hover:border-signal/50 hover:text-paper"
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
