@@ -265,56 +265,57 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               onClick={submit}
               disabled={disabled || !value.trim()}
               title="Invia"
-              fill="#ffd9b0"
+              // hover translucido: un alito caldo che segue il cursore, il metallo resta visibile
+              fill="rgba(255,228,198,0.42)"
               fillText="#0a0908"
               style={{
                 // Metallo fuso: top illuminato (ambra) che cola verso il cremisi profondo.
                 background:
-                  "radial-gradient(125% 120% at 50% 8%, #ffce9e 0%, #f0a36a 22%, #d4582c 55%, #b23d1d 78%, #8a2f17 100%)",
+                  "radial-gradient(125% 120% at 50% 6%, #ffd2a4 0%, #f0a36a 24%, #d4582c 56%, #b23d1d 80%, #8a2f17 100%)",
               }}
               className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#0a0908] outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
-                armed
-                  ? "shadow-[inset_0_1.5px_1px_rgba(255,233,206,0.6),inset_0_-3px_6px_-1px_rgba(74,22,10,0.65),0_0_22px_-4px_rgba(224,103,63,0.6)]"
-                  : "shadow-[inset_0_1.5px_1px_rgba(255,233,206,0.5),inset_0_-3px_6px_-1px_rgba(74,22,10,0.6)]"
+                armed ? "shadow-[0_0_22px_-4px_rgba(224,103,63,0.55)]" : ""
               }`}
               overlay={
                 <>
-                  {/* bande metalliche anisotrope che ruotano lente: è il "liquido" del metallo.
-                      rotate = transform (GPU), clippato a cerchio dall'overflow del bottone. */}
+                  {/* bande metalliche morbide (soft-light, lente): anisotropia senza effetto spinner */}
                   <motion.span
                     aria-hidden
-                    className="pointer-events-none absolute -inset-1/2 mix-blend-overlay"
+                    className="pointer-events-none absolute -inset-1/2 mix-blend-soft-light"
                     style={{
                       background:
-                        "conic-gradient(from 0deg at 50% 50%, #240c06, #ffe9cd, #c94b25, #3c150b, #ffd29c, #8a2f17, #ffeccf, #240c06)",
-                      opacity: 0.62,
+                        "conic-gradient(from 0deg at 50% 50%, rgba(255,242,224,0), rgba(255,242,224,0.85), rgba(120,42,22,0.55), rgba(255,226,192,0.7), rgba(120,42,22,0.45), rgba(255,242,224,0))",
+                      opacity: 0.5,
                     }}
                     animate={reduce ? undefined : { rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 9, ease: "linear" }}
+                    transition={{ repeat: Infinity, duration: 14, ease: "linear" }}
                   />
-                  {/* riflesso speculare stretto che scorre: la lama di luce sul metallo */}
+                  {/* glint: un lampo stretto che gira sul metallo (light che lo accarezza) */}
                   <motion.span
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-screen"
+                    className="pointer-events-none absolute -inset-1/2 mix-blend-screen"
                     style={{
                       background:
-                        "linear-gradient(118deg, transparent 38%, rgba(255,247,233,0.8) 49%, transparent 60%)",
-                      backgroundSize: "260% 260%",
+                        "conic-gradient(from 0deg at 50% 50%, transparent 0deg, transparent 64deg, rgba(255,249,237,0.8) 82deg, transparent 100deg, transparent 360deg)",
                     }}
-                    animate={reduce ? undefined : { backgroundPosition: ["150% 150%", "-60% -60%"] }}
-                    transition={{ repeat: Infinity, duration: 5.2, ease: "easeInOut", delay: 0.6 }}
+                    animate={reduce ? undefined : { rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 7, ease: "linear" }}
                   />
-                  {/* specular alto fisso: curvatura lucida del metallo */}
+                  {/* specular fisso alto-sinistra: curvatura lucida del metallo */}
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-0 rounded-full"
-                    style={{ zIndex: 1, background: "radial-gradient(46% 34% at 39% 17%, rgba(255,250,242,0.7), transparent 66%)" }}
+                    style={{ zIndex: 1, background: "radial-gradient(44% 34% at 37% 19%, rgba(255,250,242,0.72), transparent 64%)" }}
                   />
-                  {/* fresnel rim cromato */}
+                  {/* fresnel rim + bevel: highlight ambra in alto, ombra calda sotto */}
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-0 rounded-full"
-                    style={{ zIndex: 1, boxShadow: "inset 0 0 0 1px rgba(255,236,212,0.3), inset 0 1px 2px rgba(255,242,224,0.45)" }}
+                    style={{
+                      zIndex: 1,
+                      boxShadow:
+                        "inset 0 1.5px 1px rgba(255,236,214,0.55), inset 0 0 0 1px rgba(255,230,205,0.14), inset 0 -3px 7px -2px rgba(74,22,10,0.55)",
+                    }}
                   />
                 </>
               }
