@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { seeSheet, type ChatMessage as ApiMsg } from "../lib/api";
+import { seeSheet, streamChat, type ChatMessage as ApiMsg } from "../lib/api";
 import ChatMessageView from "./ChatMessage";
 
 /**
@@ -229,14 +229,15 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
 
   const askSheet = async (text: string) => {
     if (busy) return;
-    const img = snapshot();
-    if (!img) return;
-    // i testi scritti a mano non sono sul canvas: passali come contesto
+    // ROUTER: c'è un disegno? → serve la VISTA (Gemini, più lento ma necessario).
+    // Niente disegno (solo testo) → cosa semplice → Groq DIRETTO e velocissimo.
+    const hasDrawing = !inkEmpty || textsRef.current.length > 0;
     const written = textsRef.current
       .map((t) => t.value.trim())
       .filter(Boolean)
       .join(" · ");
     const typed = text.trim();
+    if (!hasDrawing && !typed) return; // niente da fare
     const prompt =
       (typed || "Guarda il mio foglio: cosa vedi? Rappresenta in parole il disegno e l'idea dietro.") +
       (written ? `\n\n[Testi scritti sul foglio: ${written}]` : "");
@@ -249,12 +250,19 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     setChatInput("");
     setBusy(true);
     setCollapsed(true); // all'invio il foglio si richiude (animato) → spazio alla risposta
+    let acc = "";
+    const onTok = (d: string) => {
+      acc += d;
+      setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: acc } : m)));
+    };
     try {
-      let acc = "";
-      await seeSheet(img, prompt, history, (d) => {
-        acc += d;
-        setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: acc } : m)));
-      });
+      if (hasDrawing) {
+        const img = snapshot();
+        if (img) await seeSheet(img, prompt, history, onTok);
+      } else {
+        // Groq diretto in modalità canvas → crea da testo (artifact) in <1s
+        await streamChat([...history, { role: "user", content: prompt }], onTok, undefined, "canvas", "whychat-5.5", false);
+      }
     } catch (e) {
       const msg = `⚠ ${(e as Error).message}`;
       setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: m.content || msg } : m)));
