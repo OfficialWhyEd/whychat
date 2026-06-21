@@ -1361,6 +1361,174 @@ async function handlePlan(req: Request, env: Env): Promise<Response> {
   return json({ steps }, 200, cors);
 }
 
+// ── /api/tts — voce neural Microsoft/Edge (come OpenClaw) via WebSocket ────────
+// Stesso motore di node-edge-tts: connessione al servizio Edge "read aloud", invio
+// SSML con la voce it-IT-ElsaNeural, ricezione dell'MP3 in frame binari.
+const EDGE_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+// schema https:// (non wss://): Cloudflare fa l'upgrade a WebSocket dall'header Upgrade
+const EDGE_WSS = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${EDGE_TOKEN}`;
+
+// WebSocket lato Cloudflare (ha .accept(), assente nel tipo DOM standard)
+interface CFWebSocket {
+  accept(): void;
+  send(data: string): void;
+  close(): void;
+  addEventListener(type: "message" | "close" | "error", cb: (ev: MessageEvent) => void): void;
+}
+
+/** Token Sec-MS-GEC richiesto da Edge: SHA256(ticks_arrotondati_5min + token). */
+async function edgeGec(): Promise<string> {
+  const ticks = BigInt(Math.floor(Date.now() / 1000) + 11644473600) * 10000000n;
+  const rounded = ticks - (ticks % 3000000000n); // finestra di 5 minuti
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rounded.toString() + EDGE_TOKEN));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+/** Voce neural Microsoft/Edge (come OpenClaw). Lancia un errore se non raggiungibile. */
+async function ttsEdge(text: string, voice: string, rate: string, pitch: string, lang: string): Promise<Uint8Array> {
+  const gec = await edgeGec();
+  const url = `${EDGE_WSS}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=1-130.0.2849.68`;
+  const resp = await fetch(url, {
+    headers: {
+      Upgrade: "websocket",
+      Origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+    },
+  });
+  const ws = (resp as unknown as { webSocket?: CFWebSocket }).webSocket;
+  if (!ws) throw new Error(`edge handshake ${resp.status}`);
+  ws.accept();
+  const now = new Date().toISOString();
+  const config = `X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
+  const reqId = crypto.randomUUID().replace(/-/g, "");
+  const ssml = `X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody rate='${rate}' pitch='${pitch}'>${escapeXml(text)}</prosody></voice></speak>`;
+  const chunks: Uint8Array[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), 25000);
+    ws.addEventListener("message", (ev: MessageEvent) => {
+      if (typeof ev.data === "string") {
+        if (ev.data.includes("Path:turn.end")) {
+          clearTimeout(timer);
+          try {
+            ws.close();
+          } catch {
+            /* già chiuso */
+          }
+          resolve();
+        }
+      } else {
+        const view = new Uint8Array(ev.data as ArrayBuffer);
+        const headerLen = (view[0] << 8) | view[1];
+        if (view.length > 2 + headerLen) chunks.push(view.slice(2 + headerLen));
+      }
+    });
+    ws.addEventListener("close", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    ws.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("ws error"));
+    });
+    ws.send(config);
+    ws.send(ssml);
+  });
+  if (!chunks.length) throw new Error("edge no audio");
+  return concatBytes(chunks);
+}
+
+/** Spezza il testo in pezzi ≤ maxLen, preferendo i confini di frase. */
+function chunkText(text: string, maxLen = 190): string[] {
+  const parts: string[] = [];
+  const sentences = text.match(/[^.!?…]+[.!?…]*\s*/g) ?? [text];
+  let cur = "";
+  for (const s of sentences) {
+    if ((cur + s).length > maxLen) {
+      if (cur) parts.push(cur.trim());
+      if (s.length > maxLen) {
+        for (let i = 0; i < s.length; i += maxLen) parts.push(s.slice(i, i + maxLen).trim());
+        cur = "";
+      } else cur = s;
+    } else cur += s;
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts.filter(Boolean);
+}
+
+/** Fallback affidabile da datacenter: Google Translate TTS (voce italiana). */
+async function ttsGoogle(text: string, lang: string): Promise<Uint8Array> {
+  const tl = (lang.split("-")[0] || "it").toLowerCase();
+  const parts = chunkText(text);
+  const out: Uint8Array[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(p)}&tl=${tl}&client=tw-ob&total=${parts.length}&idx=${i}&textlen=${p.length}`;
+    const r = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        Referer: "https://translate.google.com/",
+      },
+    });
+    if (!r.ok) throw new Error(`gtts ${r.status}`);
+    out.push(new Uint8Array(await r.arrayBuffer()));
+  }
+  if (!out.length) throw new Error("gtts no audio");
+  return concatBytes(out);
+}
+
+async function handleTts(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { text?: unknown; voice?: unknown; rate?: unknown; pitch?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const text = String(body.text ?? "").slice(0, 4096).trim();
+  if (!text) return json({ error: "testo vuoto" }, 400, cors);
+  const voice = /^[a-zA-Z]+-[a-zA-Z]+-[a-zA-Z]+Neural$/.test(String(body.voice ?? "")) ? String(body.voice) : "it-IT-ElsaNeural";
+  const rate = /^[+-]\d{1,3}%$/.test(String(body.rate ?? "")) ? String(body.rate) : "+6%";
+  const pitch = /^[+-]\d{1,3}Hz$/.test(String(body.pitch ?? "")) ? String(body.pitch) : "+0Hz";
+  const lang = voice.split("-").slice(0, 2).join("-") || "it-IT";
+
+  // 1) voce Edge (Elsa) — la più bella; può fallire dagli IP datacenter (403).
+  let audio: Uint8Array | null = null;
+  let engine = "edge";
+  try {
+    audio = await ttsEdge(text, voice, rate, pitch, lang);
+  } catch {
+    // 2) fallback affidabile: Google Translate TTS (italiano), funziona da server.
+    try {
+      audio = await ttsGoogle(text, lang);
+      engine = "google";
+    } catch (e2) {
+      return json({ error: "voce non disponibile", detail: String(e2).slice(0, 160) }, 502, cors);
+    }
+  }
+  return new Response(audio as BodyInit, {
+    status: 200,
+    headers: { ...cors, "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-TTS-Engine": engine },
+  });
+}
+
 // ── /api/music — WhyMusic: analisi profonda di una traccia (metriche dal browser) ─
 async function handleMusic(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
@@ -1421,6 +1589,7 @@ export default {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
       if (url.pathname === "/api/plan" && req.method === "POST") return await handlePlan(req, env);
+      if (url.pathname === "/api/tts" && req.method === "POST") return await handleTts(req, env);
       if (url.pathname === "/api/music" && req.method === "POST") return await handleMusic(req, env);
       if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env, ctx);
       if (url.pathname === "/api/reason" && req.method === "POST") return await handleReason(req, env, ctx);
