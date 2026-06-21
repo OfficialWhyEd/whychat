@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { seeSheet, streamChat, deepThink, type ChatMessage as ApiMsg } from "../lib/api";
+import { seeSheet, streamChat, reasonGroq, type ChatMessage as ApiMsg } from "../lib/api";
 import ChatMessageView from "./ChatMessage";
 
 /**
@@ -268,17 +268,20 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
           "\n\n(Sistema: se questa richiesta è semplice, creala/rispondi subito. Se invece è DAVVERO complessa e richiede ragionamento profondo, rispondi SOLO ed esattamente con [[RAGIONA]] e nient'altro.)";
         await streamChat([...history, { role: "user", content: groqPrompt }], onTok, undefined, "canvas", "whychat-5.5", false);
         if (acc.trim().toUpperCase().includes("[[RAGIONA")) {
-          // escalation decisa dal modello → ragionamento Google (Gemini)
+          // escalation decisa dal modello → ragionamento VELOCE su Groq (DeepSeek-style):
+          // pensiero + risposta in streaming, l'uscita resta di Groq.
           acc = "";
           setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: "", thoughts: "" } : m)));
           let thoughts = "";
-          await deepThink(
+          await reasonGroq(
             [...history, { role: "user", content: prompt }],
             (d) => {
               thoughts += d;
               setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, thoughts } : m)));
             },
             onTok,
+            undefined,
+            "canvas",
           );
         }
       }
