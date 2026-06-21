@@ -577,6 +577,7 @@ function Chat() {
                     >
                       <ChatMessage
                         msg={earth ? { ...m, content: m.content.replace(LUOGO_RE, "").trimEnd() } : m}
+                        prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
                         onRetry={
                           m.role === "assistant" && !streaming
                             ? () => {
@@ -624,6 +625,7 @@ function Chat() {
                       <div key={m.id} data-mid={m.id} data-role={m.role}>
                         <ChatMessage
                           msg={m}
+                          prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
                           onRetry={
                             m.role === "assistant" && !streaming
                               ? () => {
