@@ -291,6 +291,7 @@ async function logTurn(
   name: string,
   userMessage: string,
   assistantText: string,
+  mode = "chat",
 ) {
   if (!env.MEMORY) return; // memoria disattivata finché non c'è il KV
   const ts = new Date().toISOString();
@@ -303,6 +304,7 @@ async function logTurn(
     name: name || null,
     ipHash,
     country,
+    mode, // quale modalità ha usato (chat/deep/sheet/group/earth/…)
     user: userMessage.slice(0, MAX_MESSAGE_CHARS),
     whychat: assistantText.slice(0, 2000),
   };
@@ -419,7 +421,8 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   if (!messages) return json({ error: "messaggi non validi" }, 400, cors);
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
   const name = String(body.name ?? "").slice(0, 80);
-  const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
+  const reqMode = String(body.mode ?? "chat");
+  const modeHint = MODE_HINTS[reqMode] ?? "";
   const groqModel = MODEL_MAP[String(body.model ?? "")] || env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
@@ -469,7 +472,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
   // streaming, riconvertito nel formato SSE che il client già legge. Così
   // chat/canvas/apprendimento restano vivi sempre.
   if (!upstream || !upstream.body) {
-    return streamGeminiChat(req, env, ctx, messages, systemText, visitorId, name, lastUser, cors);
+    return streamGeminiChat(req, env, ctx, messages, systemText, visitorId, name, lastUser, cors, reqMode);
   }
 
   // Tee: passa al client E accumula il testo per la memoria.
@@ -493,7 +496,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
       controller.enqueue(chunk);
     },
     flush() {
-      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, assistantText));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, assistantText, reqMode));
     },
   });
 
@@ -528,6 +531,7 @@ async function streamGeminiChat(
   name: string,
   lastUser: string,
   cors: Record<string, string>,
+  mode = "chat",
 ): Promise<Response> {
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -592,7 +596,7 @@ async function streamGeminiChat(
     },
     flush(controller) {
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, acc));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, acc, mode));
     },
   });
 
@@ -672,7 +676,7 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
       },
       flush(controller) {
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer));
+        ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer, "reason"));
       },
     });
     return new Response(upstream.body!.pipeThrough(transform), {
@@ -845,7 +849,7 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
     },
     flush(controller) {
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      ctx.waitUntil(logTurn(env, req, visitorId, name, "[OnlyType: guarda il foglio]", acc));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, "[OnlyType: guarda il foglio]", acc, "sheet"));
     },
   });
 
@@ -993,7 +997,7 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
       }
     },
     flush() {
-      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answerAcc));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answerAcc, "deep"));
     },
   });
 
@@ -1091,7 +1095,7 @@ Parla in PRIMA PERSONA, ${tone}, 1-3 frasi, tono da chat viva. Porta la TUA pros
     return json({ error: "Un agente non riesce a parlare ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
   }
 
-  ctx.waitUntil(logTurn(env, req, visitorId, name, turns[turns.length - 1].content, `[${agent.name}] ${content}`));
+  ctx.waitUntil(logTurn(env, req, visitorId, name, turns[turns.length - 1].content, `[${agent.name}] ${content}`, "group"));
   return json(
     { agent: { id: agent.id, name: agent.name, color: agent.color, initial: agent.name[0] }, content, next },
     200,
@@ -1176,7 +1180,7 @@ Concreto, niente disclaimer inutili.`;
     if (p.thought) thoughts += p.text;
     else text += p.text;
   }
-  ctx.waitUntil(logTurn(env, req, visitorId, name, question, text));
+  ctx.waitUntil(logTurn(env, req, visitorId, name, question, text, "group"));
   return json({ prediction: text, thoughts }, 200, cors);
 }
 

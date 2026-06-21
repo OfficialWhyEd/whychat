@@ -17,6 +17,7 @@ import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import ChatMinimap from "./components/ChatMinimap";
 import Vault from "./components/Vault";
+import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
 import { streamChat, deepThink, planSteps, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
 import type { MapPin } from "./components/WhyEarthLive";
@@ -62,6 +63,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", f);
   }, []);
   if (route === "#vault") return <Vault />;
+  if (route === "#dashboard") return <Dashboard />;
   if (route === "#dreams") return <Dreams />;
   return <Chat />;
 }
