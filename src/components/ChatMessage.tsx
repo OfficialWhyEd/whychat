@@ -7,6 +7,39 @@ import WhyMark from "./WhyMark";
 import { ShiningText } from "./ShiningText";
 import { WLoader } from "./WLoader";
 import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
+import { AgentPlanning, type PlanStep, type PlanStepStatus } from "./AgentPlanning";
+import type { PlanStepData } from "../lib/api";
+
+// tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
+const TOOL_LABEL: Record<string, string> = {
+  analisi: "analisi",
+  ricerca: "ricerca",
+  sintesi: "sintesi",
+  codice: "codice",
+  verifica: "verifica",
+};
+
+// mappa il piano (dati) → passi con stato per la timeline AgentPlanning
+function planToSteps(plan: PlanStepData[], active: number, streaming: boolean): PlanStep[] {
+  return plan.map((s, i) => {
+    const status: PlanStepStatus =
+      !streaming || i < active ? "success" : i === active ? "active" : "pending";
+    return {
+      id: String(i),
+      title: s.title,
+      status,
+      duration: TOOL_LABEL[s.tool] ?? s.tool,
+      content: s.detail ? (
+        <span className="flex items-start gap-2">
+          <span className="mono shrink-0 rounded bg-[rgba(240,163,106,0.14)] px-1.5 py-0.5 text-[0.5rem] text-ember">
+            {TOOL_LABEL[s.tool] ?? s.tool}
+          </span>
+          <span>{s.detail}</span>
+        </span>
+      ) : undefined,
+    };
+  });
+}
 
 // micro-azioni che scorrono mentre WhyChat prepara la risposta (stile Claude Code)
 const THINK_PHASES = [
@@ -25,6 +58,8 @@ export interface Message {
   content: string;
   streaming?: boolean;
   thoughts?: string; // ragionamento (modalità pensiero profondo)
+  plan?: PlanStepData[]; // piano agente (plan mode) → timeline
+  planActive?: number; // indice del passo in corso (precedenti = fatti)
 }
 
 export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: () => void }) {
@@ -90,6 +125,10 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
       </div>
       <div className="min-w-0 flex-1">
         <div className="mono mb-1 text-[0.55rem] text-faint">WHYCHAT</div>
+
+        {msg.plan && msg.plan.length > 0 && (
+          <AgentPlanning steps={planToSteps(msg.plan, msg.planActive ?? 0, !!msg.streaming)} />
+        )}
 
         {msg.thoughts && (
           <details

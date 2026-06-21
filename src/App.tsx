@@ -15,7 +15,7 @@ import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, type ChatMessage as ApiMsg } from "./lib/api";
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
@@ -43,6 +43,9 @@ function Chat() {
   const [mode, setMode] = useState<Mode>("chat");
   const [model, setModel] = useState("whychat-5.5");
   const [webSearch, setWebSearch] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const planRef = useRef(planMode);
+  planRef.current = planMode;
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
   const [autoTts, setAutoTtsState] = useState(getTtsAuto);
@@ -226,6 +229,42 @@ function Chat() {
       } else {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
+
+        // PLAN MODE: prima pianifica (timeline agente stile Claude Code), poi rispondi
+        const usePlan = planRef.current && ["chat", "canvas", "learn"].includes(useMode);
+        let planTimer: ReturnType<typeof setInterval> | null = null;
+        if (usePlan) {
+          try {
+            const steps = await planSteps(history, text);
+            if (steps.length) {
+              setChats((prev) =>
+                prev.map((c) =>
+                  c.id === id
+                    ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, plan: steps, planActive: 0 } : m)) }
+                    : c,
+                ),
+              );
+              let activeStep = 0;
+              planTimer = setInterval(() => {
+                activeStep += 1;
+                setChats((prev) =>
+                  prev.map((c) =>
+                    c.id === id
+                      ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, planActive: activeStep } : m)) }
+                      : c,
+                  ),
+                );
+                if (activeStep >= steps.length && planTimer) {
+                  clearInterval(planTimer);
+                  planTimer = null;
+                }
+              }, 650);
+            }
+          } catch {
+            /* il piano è opzionale: se fallisce, si risponde dritti */
+          }
+        }
+
         let acc = "";
         await streamChat(
           history,
@@ -238,6 +277,7 @@ function Chat() {
           model,
           webSearch,
         );
+        if (planTimer) clearInterval(planTimer);
         patch(acc, true);
         if (autoTtsRef.current) speak(acc);
       }
@@ -499,6 +539,8 @@ function Chat() {
               streaming={busy}
               search={webSearch}
               onToggleSearch={() => setWebSearch((s) => !s)}
+              plan={planMode}
+              onTogglePlan={() => setPlanMode((p) => !p)}
             />
             <p className="mx-auto mt-2.5 max-w-md text-center text-[0.6rem] leading-relaxed text-faint">
               <span className="text-dim/70">{modelName(model)}</span> · le conversazioni possono

@@ -31,8 +31,19 @@ export interface Env {
 const MODE_HINTS: Record<string, string> = {
   canvas: `\n\n[MODALITÀ CANVAS] Quando ha senso, rispondi COSTRUENDO: emetti uno o più artifact \`\`\`whyart (HTML autosufficiente) — schizzi, diagrammi, mini-interfacce, visualizzazioni, mini-giochi. Prima una riga di testo, poi il canvas. Fai vedere, non solo dire.`,
   learn: `\n\n[MODALITÀ APPRENDIMENTO] Insegna come faresti a qualcuno che vuole capire davvero: parti dall'intuizione, poi la struttura, poi un esempio concreto. Un passo alla volta, niente muri di testo. Fai una domanda di verifica alla fine. Tono diretto e caldo, mai accademico.`,
+  earth: `\n\n[MODALITÀ WHYEARTH] Sei connesso al planetario di WhyChat: il mappamondo vivo. Rispondi a domande geografiche con precisione (luoghi, paesi, capitali, distanze, fusi orari, geografia fisica e umana, attualità di un posto). Quando nomini uno o più luoghi specifici su cui ha senso volare e mettere un pin, emetti ciascuno su una riga a sé con il marcatore: [[LUOGO: Città, Paese]]. Tieni il testo conversazionale, vivo e breve.`,
   chat: "",
 };
+
+/** Contesto temporale: WhyChat sa sempre che giorno e ora è (Europe/Rome). */
+function nowContext(): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Rome" });
+    return `\n\n[ADESSO È: ${fmt.format(new Date())} (Europe/Rome). Conosci la data e l'ora correnti: usale quando servono, con naturalezza.]`;
+  } catch {
+    return "";
+  }
+}
 
 // ── Modelli selezionabili (nomi-anima → modelli Groq reali, entrambi in streaming) ──
 const MODEL_MAP: Record<string, string> = {
@@ -380,6 +391,7 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const systemText =
     SOUL +
+    nowContext() +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
     modeHint +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
@@ -992,6 +1004,135 @@ async function handleVault(req: Request, env: Env): Promise<Response> {
   return json({ count: entries.filter(Boolean).length, entries: entries.filter(Boolean) }, 200, cors);
 }
 
+// ── /api/plan — il PIANIFICATORE: scompone un compito in passi (stile agente) ──
+const PLAN_TOOLS = ["analisi", "ricerca", "sintesi", "codice", "verifica"];
+async function handlePlan(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { messages?: unknown; task?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const messages = sanitizeMessages(body.messages) ?? [];
+  const task =
+    (String(body.task ?? "").slice(0, MAX_MESSAGE_CHARS) ||
+      [...messages].reverse().find((m) => m.role === "user")?.content ||
+      "").trim();
+  if (!task) return json({ error: "task vuoto" }, 400, cors);
+
+  const sys = `Sei il PIANIFICATORE di WhyChat. Scomponi il compito in 3-6 passi concreti e ordinati, come farebbe un agente che lavora (stile Claude Code). Per ogni passo dai: "title" brevissimo (max 6 parole, in italiano), "tool" tra [${PLAN_TOOLS.map((t) => `"${t}"`).join(", ")}], "detail" di UNA riga. Rispondi SOLO JSON: {"steps":[{"title":"...","tool":"...","detail":"..."}]}`;
+
+  let steps: { title: string; tool: string; detail: string }[] = [];
+  try {
+    const raw = await groqChat(env, sys, `Compito:\n${task}\n\nProduci il piano (solo JSON).`, {
+      temperature: 0.5,
+      maxTokens: 500,
+      json: true,
+    });
+    const parsed = JSON.parse(extractJson(raw)) as { steps?: unknown };
+    const arr = Array.isArray(parsed.steps) ? parsed.steps : [];
+    steps = arr
+      .slice(0, 6)
+      .map((s, i) => {
+        const o = s as { title?: unknown; tool?: unknown; detail?: unknown };
+        const tool = String(o.tool ?? "analisi");
+        return {
+          title: String(o.title ?? `Passo ${i + 1}`).slice(0, 80),
+          tool: PLAN_TOOLS.includes(tool) ? tool : "analisi",
+          detail: String(o.detail ?? "").slice(0, 200),
+        };
+      })
+      .filter((s) => s.title);
+  } catch {
+    steps = [];
+  }
+  if (!steps.length)
+    steps = [
+      { title: "Capisco la richiesta", tool: "analisi", detail: "Leggo e isolo l'obiettivo reale." },
+      { title: "Raccolgo il materiale", tool: "ricerca", detail: "Metto insieme ciò che serve." },
+      { title: "Compongo la risposta", tool: "sintesi", detail: "Costruisco il risultato finale." },
+    ];
+  return json({ steps }, 200, cors);
+}
+
+// ── /api/see — VISIONE OnlyType: il disegno È il prompt, WhyChat lo crea ──────
+function dataUrlToInline(dataUrl: string): { mimeType: string; data: string } | null {
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
+  return m ? { mimeType: m[1], data: m[2] } : null;
+}
+async function handleSee(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { image?: unknown; prompt?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const inline = dataUrlToInline(String(body.image ?? ""));
+  if (!inline) return json({ error: "immagine non valida" }, 400, cors);
+  const ask = String(body.prompt ?? "").slice(0, 2000);
+  const sys =
+    SOUL +
+    nowContext() +
+    `\n\n[MODALITÀ ONLYTYPE — VISIONE] Ti arriva un DISEGNO/SCHIZZO fatto a mano. Il disegno È il prompt. Primo: descrivi a parole, in 1-2 frasi, cosa rappresenta. Poi RAGIONA sull'intento e CREA ciò che chiede: se è un'interfaccia, un sito, un diagramma, un grafico o un mini-gioco → emetti un artifact \`\`\`whyart (HTML autosufficiente) che lo realizza davvero; se è un'equazione o una formula → risolvila passo passo; se è un'idea → sviluppala. Non limitarti a descrivere: realizza.` +
+    (ask ? `\nL'utente aggiunge: "${ask}".` : "");
+  let text = "";
+  try {
+    const data = await geminiGenerate(env, {
+      systemInstruction: { parts: [{ text: sys }] },
+      contents: [
+        { role: "user", parts: [{ inlineData: inline }, { text: ask || "Guarda il disegno e crea ciò che rappresenta." }] },
+      ] as unknown,
+      generationConfig: { temperature: 0.8, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+    });
+    text = (data.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought)
+      .map((p) => p.text ?? "")
+      .join("");
+  } catch (e) {
+    return json({ error: "La visione non è disponibile ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+  }
+  return json({ text }, 200, cors);
+}
+
+// ── /api/music — WhyMusic: analisi profonda di una traccia (metriche dal browser) ─
+async function handleMusic(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { features?: unknown; ask?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const f = body.features && typeof body.features === "object" ? body.features : {};
+  const ask = String(body.ask ?? "").slice(0, 2000);
+  const featText = JSON.stringify(f).slice(0, 1500);
+  const sys =
+    SOUL +
+    `\n\n[MODALITÀ WHYMUSIC] Sei un fonico e produttore esperto. Ti arrivano le METRICHE estratte da una traccia (analizzata nel browser dell'utente). Dai un'analisi PROFONDA e pratica in markdown:
+## Lettura tecnica
+(tempo/BPM, tonalità stimata, dinamica, bilanciamento spettrale, loudness)
+## Cosa funziona
+## Cosa sistemare
+(mosse concrete: EQ in Hz, compressione, stereo, headroom, arrangiamento)
+## Idee di produzione
+(riarrangiamento, sound design, riferimenti)
+Concreto, numeri quando puoi, niente fuffa.`;
+  let text = "";
+  try {
+    text = await groqChat(
+      env,
+      sys,
+      `Metriche della traccia:\n${featText}\n\n${ask ? `Richiesta specifica: ${ask}\n\n` : ""}Analizza in profondità.`,
+      { temperature: 0.7, maxTokens: 1300 },
+    );
+  } catch (e) {
+    return json({ error: "L'analisi non è disponibile ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+  }
+  return json({ text }, 200, cors);
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -1014,6 +1155,9 @@ export default {
     try {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
+      if (url.pathname === "/api/plan" && req.method === "POST") return await handlePlan(req, env);
+      if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env);
+      if (url.pathname === "/api/music" && req.method === "POST") return await handleMusic(req, env);
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);
       if (url.pathname === "/api/group/predict" && req.method === "POST") return await handleGroupPredict(req, env, ctx);
       if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);

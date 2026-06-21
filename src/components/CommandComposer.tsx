@@ -82,9 +82,23 @@ interface Props {
   streaming: boolean;
   search?: boolean;
   onToggleSearch?: () => void;
+  plan?: boolean;
+  onTogglePlan?: () => void;
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch }: Props) {
+// la plan mode ha senso solo nelle modalità testuali
+const PLANNABLE: Mode[] = ["chat", "canvas", "learn"];
+// euristica "domanda complessa/lunga" → suggerisci di pianificare
+function looksComplex(t: string): boolean {
+  const s = t.trim();
+  if (s.length > 180) return true;
+  if ((s.match(/\?/g)?.length ?? 0) >= 2) return true;
+  return /\b(progett\w+|costruisc\w+|costruire|pianific\w+|analizz\w+|confront\w+|organizz\w+|strategi\w+|piano|passo\s*passo|step by step|in dettaglio|tutti i passaggi)\b/i.test(
+    s,
+  );
+}
+
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan }: Props) {
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -92,6 +106,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const reduce = useReducedMotion();
   // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
   const armed = value.trim().length > 0 && !disabled;
+  // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
+  const suggestPlan = !plan && !!onTogglePlan && PLANNABLE.includes(mode) && looksComplex(value);
 
   useEffect(() => {
     const el = ref.current;
@@ -161,6 +177,34 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               </ul>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Suggerimento plan mode: appare per domande complesse, si accetta con un tap */}
+      <AnimatePresence>
+        {suggestPlan && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.22, ease: EASE_OUT }}
+            className="mb-2 flex items-center gap-2 rounded-xl border border-ember/30 bg-[rgba(240,163,106,0.08)] px-3 py-2"
+          >
+            <span className="text-ember">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className="flex-1 text-[0.74rem] leading-snug text-dim">
+              Domanda impegnativa — vuoi che <span className="text-paper">pianifichi</span> prima?
+            </span>
+            <button
+              onClick={onTogglePlan}
+              className="mono shrink-0 rounded-full border border-ember/50 bg-[rgba(240,163,106,0.14)] px-2.5 py-1 text-[0.55rem] text-ember transition hover:bg-[rgba(240,163,106,0.22)]"
+            >
+              PIANIFICA
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -250,6 +294,39 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
                   >
                     CERCA
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          )}
+
+          {/* tasto: plan mode — pianifica prima di rispondere (timeline agente) */}
+          {onTogglePlan && PLANNABLE.includes(mode) && (
+            <motion.button
+              type="button"
+              onClick={onTogglePlan}
+              title="Plan mode: pianifica prima di rispondere"
+              whileTap={{ scale: 0.93 }}
+              transition={{ type: "spring", stiffness: 420, damping: 16 }}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
+                plan
+                  ? "border-ember/50 bg-[rgba(240,163,106,0.14)] text-ember hover:bg-[rgba(240,163,106,0.22)]"
+                  : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
+              </svg>
+              <AnimatePresence>
+                {plan && (
+                  <motion.span
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: "auto", opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
+                  >
+                    PIANO
                   </motion.span>
                 )}
               </AnimatePresence>
