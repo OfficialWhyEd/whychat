@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "./components/Sidebar";
 import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
+import ChatMinimap from "./components/ChatMinimap";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
 import { streamChat, deepThink, planSteps, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
@@ -610,31 +611,35 @@ function Chat() {
             </div>
           </main>
         ) : (
-          <main ref={scrollRef} onScroll={onScroll} className="scroll-thin relative flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-2xl px-4 py-6">
-              {empty ? (
-                <Hero onPick={send} />
-              ) : (
-                <div className="flex flex-col gap-6">
-                  {messages.map((m, i) => (
-                    <ChatMessage
-                      key={m.id}
-                      msg={m}
-                      onRetry={
-                        m.role === "assistant" && !streaming
-                          ? () => {
-                              const prevUser = [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
-                              if (prevUser) send(prevUser.content);
-                            }
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-              <div ref={bottomRef} className="h-2" />
-            </div>
-          </main>
+          <>
+            <main ref={scrollRef} onScroll={onScroll} className="scroll-thin relative flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-2xl px-4 py-6">
+                {empty ? (
+                  <Hero onPick={send} />
+                ) : (
+                  <div className="flex flex-col gap-6">
+                    {messages.map((m, i) => (
+                      <div key={m.id} data-mid={m.id} data-role={m.role}>
+                        <ChatMessage
+                          msg={m}
+                          onRetry={
+                            m.role === "assistant" && !streaming
+                              ? () => {
+                                  const prevUser = [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
+                                  if (prevUser) send(prevUser.content);
+                                }
+                              : undefined
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div ref={bottomRef} className="h-2" />
+              </div>
+            </main>
+            {!empty && <ChatMinimap scrollRef={scrollRef} messages={messages} />}
+          </>
         )}
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
