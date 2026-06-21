@@ -108,22 +108,14 @@ function meter() {
   }
 }
 
-async function playEdge(text: string, onState?: (s: boolean) => void): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/tts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voice: getTtsVoice() }),
-  });
-  if (!res.ok) throw new Error(`tts ${res.status}`);
-  const buf = await res.arrayBuffer();
-  if (!buf.byteLength) throw new Error("audio vuoto");
-  const blob = new Blob([buf], { type: "audio/mpeg" });
-  const url = URL.createObjectURL(blob);
+// Riproduce bytes MP3 con AnalyserNode (ampiezza reale → reattività particelle)
+async function playBytes(bytes: ArrayBuffer, onState?: (s: boolean) => void): Promise<void> {
+  if (!bytes.byteLength) throw new Error("audio vuoto");
+  const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
   const audio = new Audio(url);
   audio.preload = "auto";
   curAudio = audio;
   curUrl = url;
-
   const finish = () => {
     if (curAudio === audio) {
       _speaking = false;
@@ -149,6 +141,88 @@ async function playEdge(text: string, onState?: (s: boolean) => void): Promise<v
     /* niente analyser: l'audio si sente lo stesso */
   }
   await audio.play();
+}
+
+// ── Edge TTS DIRETTO dal browser (usa l'IP di casa, gratis come OpenClaw) ──────
+const EDGE_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+async function edgeGecBrowser(): Promise<string> {
+  let ticks = BigInt(Math.floor(Date.now() / 1000) + 11644473600) * 10000000n;
+  ticks -= ticks % 3000000000n;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ticks.toString() + EDGE_TOKEN));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+function xmlEsc(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+/** Sintesi via WebSocket Edge direttamente dal browser → ArrayBuffer MP3. */
+async function edgeBrowserBytes(text: string): Promise<ArrayBuffer> {
+  if (typeof WebSocket === "undefined") throw new Error("no ws");
+  const gec = await edgeGecBrowser();
+  const voice = getTtsVoice();
+  const lang = voice.split("-").slice(0, 2).join("-") || "it-IT";
+  const url = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${EDGE_TOKEN}&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=1-130.0.2849.68`;
+  const ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+  const chunks: Uint8Array[] = [];
+  return await new Promise<ArrayBuffer>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        /* */
+      }
+      reject(new Error("edge timeout"));
+    }, 8000);
+    ws.onopen = () => {
+      const now = new Date().toISOString();
+      ws.send(
+        `X-Timestamp:${now}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`,
+      );
+      ws.send(
+        `X-RequestId:${crypto.randomUUID().replace(/-/g, "")}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${now}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody rate='+6%' pitch='+0Hz'>${xmlEsc(text)}</prosody></voice></speak>`,
+      );
+    };
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === "string") {
+        if (ev.data.includes("Path:turn.end")) {
+          clearTimeout(timer);
+          try {
+            ws.close();
+          } catch {
+            /* */
+          }
+          if (!chunks.length) return reject(new Error("edge no audio"));
+          let total = 0;
+          for (const c of chunks) total += c.length;
+          const out = new Uint8Array(total);
+          let off = 0;
+          for (const c of chunks) {
+            out.set(c, off);
+            off += c.length;
+          }
+          resolve(out.buffer);
+        }
+      } else {
+        const view = new Uint8Array(ev.data as ArrayBuffer);
+        const headerLen = (view[0] << 8) | view[1];
+        if (view.length > 2 + headerLen) chunks.push(view.slice(2 + headerLen));
+      }
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("edge ws error"));
+    };
+  });
+}
+
+async function workerBytes(text: string): Promise<ArrayBuffer> {
+  const res = await fetch(`${WORKER_URL}/api/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice: getTtsVoice() }),
+  });
+  if (!res.ok) throw new Error(`tts ${res.status}`);
+  return await res.arrayBuffer();
 }
 
 // ── Fallback Web Speech (offline) ─────────────────────────────────────────────
@@ -231,8 +305,24 @@ export function speak(text: string, onState?: (speaking: boolean) => void): bool
   const body = clean(text);
   if (!body) return false;
   stop();
-  // prova la voce Edge (bella); se fallisce, ripiega su Web Speech
-  playEdge(body, onState).catch(() => speakWebSpeech(body, onState));
+  // 1) Edge/Elsa direttamente dal browser (IP di casa, gratis come OpenClaw)
+  // 2) worker /api/tts (tenta Edge da server, poi Google IT)
+  // 3) Web Speech del browser (offline)
+  (async () => {
+    try {
+      await playBytes(await edgeBrowserBytes(body), onState);
+      return;
+    } catch {
+      /* Edge dal browser non disponibile → worker */
+    }
+    try {
+      await playBytes(await workerBytes(body), onState);
+      return;
+    } catch {
+      /* worker non disponibile → voce di sistema */
+    }
+    speakWebSpeech(body, onState);
+  })();
   return true;
 }
 
