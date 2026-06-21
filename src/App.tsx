@@ -48,6 +48,7 @@ import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/cha
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
 import { speak, getTtsAuto, setTtsAuto, ttsSupported } from "./lib/tts";
+import { AnimatedIcon } from "./components/effects/AnimatedIcon";
 
 let counter = 0;
 const uid = () => `m${++counter}_${Date.now().toString(36)}`;
@@ -729,12 +730,12 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
               onClick={() => onPick(o.text, o.mode)}
               className="group flex w-full items-center gap-3 border-t border-[var(--color-line)] py-3.5 last:border-b"
             >
-              <span
+              <AnimatedIcon
+                delay={0.12 + i * 0.06}
                 className="grid h-6 w-6 shrink-0 place-items-center text-faint transition-colors duration-200 group-hover:text-signal [&_svg]:h-[18px] [&_svg]:w-[18px]"
-                aria-hidden
               >
                 {modeIcon(o.mode)}
-              </span>
+              </AnimatedIcon>
               <span className="min-w-0 flex-1 truncate text-[0.92rem] text-dim transition-colors duration-200 group-hover:text-paper">
                 {o.text}
               </span>

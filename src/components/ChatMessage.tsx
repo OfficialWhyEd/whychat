@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { renderMarkdown } from "../lib/markdown";
-import { speak, stop as ttsStop, ttsSupported } from "../lib/tts";
+import { speak, stop as ttsStop, ttsSupported, voice } from "../lib/tts";
 import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
@@ -67,6 +67,24 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // mentre QUESTO messaggio parla, l'ampiezza reale del TTS pilota il bordo
+  // metallico (variabile CSS --v 0..1). Niente luce al centro: la voce vive
+  // sui bordi del testo bot e sulle particelle.
+  useEffect(() => {
+    if (!speaking) {
+      bodyRef.current?.style.setProperty("--v", "0");
+      return;
+    }
+    let raf = 0;
+    const loop = () => {
+      bodyRef.current?.style.setProperty("--v", voice.level.toFixed(3));
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [speaking]);
 
   // se il messaggio sparisce/cambia mentre parla, ferma la voce
   useEffect(() => () => ttsStop(), []);
@@ -160,7 +178,7 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
             <ShiningText text={`${thinkingLabel}…`} className="text-[0.95rem]" />
           </div>
         ) : (
-          <>
+          <div ref={bodyRef} className={`wc-bot-body${speaking ? " wc-speak" : ""}`}>
             {parseSegments(msg.content || "").map((seg, i) =>
               seg.type === "artifact" ? (
                 <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} />
@@ -173,7 +191,7 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
               ),
             )}
             {msg.streaming && <span className="caret" />}
-          </>
+          </div>
         )}
 
         {/* link YouTube → player ottimizzato direttamente in chat */}

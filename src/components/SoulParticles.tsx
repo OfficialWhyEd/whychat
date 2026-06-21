@@ -217,18 +217,8 @@ export default function SoulParticles({
       const t = (now - time0) * 0.0001;
       const flow = 1.5 * (1 + vlvl * 0.6); // velocità corrente, sale con la voce
 
-      // bloom centrale che "respira" la voce: alone ambra additivo, sincronizzato al TTS
-      if (vlvl > 0.015) {
-        const cx = W / 2;
-        const cy = W < 640 ? Math.max(92, H * 0.17) : Math.max(150, H * 0.28);
-        const r = Math.min(W, H) * (0.18 + vlvl * 0.22);
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, `rgba(240,163,106,${(vlvl * 0.16).toFixed(3)})`);
-        g.addColorStop(0.5, `rgba(201,75,37,${(vlvl * 0.07).toFixed(3)})`);
-        g.addColorStop(1, "rgba(201,75,37,0)");
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-      }
+      // (rimosso il bloom centrale: la voce si legge SOLO dalle particelle e dai
+      // bordi del messaggio bot, niente alone al centro dello schermo)
 
       // macchina a fasi (solo se stiamo formando testo)
       if (formRef.current) {

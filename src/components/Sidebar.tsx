@@ -1,5 +1,5 @@
 import { relativeTime, type Chat } from "../lib/chats";
-import { DiaText } from "./effects/DiaText";
+import Logo from "./Logo";
 import { MODES, type Mode } from "./CommandComposer";
 import { ProtocolBadge } from "./ProtocolBadge";
 
@@ -48,13 +48,7 @@ export default function Sidebar({
       >
         {/* brand: solo la scritta WhyChat, con l'effetto dia (niente orb) */}
         <div className="flex items-center gap-2 px-3.5 pb-3 pt-4">
-          <DiaText
-            text="WhyChat"
-            repeat
-            repeatDelay={7}
-            duration={1.6}
-            className="font-display text-[1.4rem] tracking-tight"
-          />
+          <Logo text="WhyChat" className="text-[1.7rem] tracking-tight" />
           <div className="flex-1" />
           <button
             onClick={onClose}

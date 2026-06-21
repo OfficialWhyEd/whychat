@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
+import { AnimatedIcon } from "./effects/AnimatedIcon";
 
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
@@ -198,7 +199,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                           active ? "bg-[rgba(201,75,37,0.16)]" : "hover:bg-[rgba(242,239,233,0.05)]"
                         }`}
                       >
-                        <span className={active ? "text-signal" : "text-dim"}>{m.icon}</span>
+                        <AnimatedIcon active={active} className={active ? "text-signal" : "text-dim"}>
+                          {m.icon}
+                        </AnimatedIcon>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
                             <span className={`text-[0.86rem] ${active ? "text-paper" : "text-dim"}`}>{m.label}</span>
@@ -318,7 +321,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                 : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]"
             }`}
           >
-            <span className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</span>
+            <AnimatedIcon className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</AnimatedIcon>
             <span className="mono whitespace-nowrap">{mode === "chat" ? "MODALITÀ" : current.label}</span>
             <motion.svg
               width="10" height="10" viewBox="0 0 24 24" fill="none" className="opacity-60"
