@@ -591,11 +591,20 @@ function geminiModels(env: Env): string[] {
   return list.length ? list : DEFAULT_GEMINI_MODELS;
 }
 
-// ── /api/reason — ragionamento VELOCE su Groq (modelli reasoning, stile DeepSeek).
-// Gemini è troppo lento/bufferato (~22s) per il reasoning live; Groq reasoning
-// streamma pensiero + risposta in ~0.3s. L'uscita resta di Groq (lui orchestra).
-// SSE: {t:"thought"|"answer", d} come /api/think.
-const REASON_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+// ── /api/reason — ragionamento con FALLBACK COMPLETO + ROTAZIONE.
+// Tutti i modelli reasoning disponibili, dal più potente al meno, che ruotano a
+// ogni richiesta per spalmare il consumo di token (non sforzare un modello/chiave
+// solo). Groq reasoning prima (veloce, ~0.3s, stile DeepSeek); Gemini integrato
+// come rete quando Groq è sotto sforzo. L'uscita esce come SSE {t:"thought"|"answer", d}.
+const REASON_GROQ = ["openai/gpt-oss-120b", "qwen/qwen3-32b", "openai/gpt-oss-20b"];
+const REASON_GEMINI = ["gemini-2.5-flash", "gemini-2.0-flash"];
+let reasonRot = 0; // contatore round-robin: ruota lo start per bilanciare il carico
+
+function rotateArr<T>(a: T[], n: number): T[] {
+  if (a.length < 2) return a;
+  const i = ((n % a.length) + a.length) % a.length;
+  return [...a.slice(i), ...a.slice(0, i)];
+}
 
 async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
@@ -612,78 +621,109 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
   const systemText = SOUL + BEHAVIOR + nowContext() + (name ? `\n\n[Parli con: ${name}]` : "") + modeHint;
+  const rot = reasonRot++;
 
-  const payload = (model: string) =>
-    JSON.stringify({
-      model,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 3072,
-      messages: [{ role: "system", content: systemText }, ...messages],
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // costruisce la Response SSE a partire dallo stream upstream, con un parser
+  // (Groq: delta.reasoning/content — Gemini: parts.thought/text)
+  const makeResponse = (
+    upstream: Response,
+    parse: (json: string, emit: (t: "thought" | "answer", d: string) => void) => void,
+  ) => {
+    let buf = "";
+    let answer = "";
+    const transform = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buf += decoder.decode(chunk, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith("data:")) continue;
+          const d = t.slice(5).trim();
+          if (!d || d === "[DONE]") continue;
+          parse(d, (kind, val) => {
+            if (kind === "answer") answer += val;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: kind, d: val })}\n\n`));
+          });
+        }
+      },
+      flush(controller) {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer));
+      },
     });
+    return new Response(upstream.body!.pipeThrough(transform), {
+      headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  };
 
-  let upstream: Response | null = null;
-  let lastErr = "";
-  outer: for (const model of REASON_MODELS) {
-    for (const key of groqKeys(env)) {
+  // 1) GROQ reasoning (veloce). Modelli + chiavi ruotati → spalma i token.
+  const groqBody = (model: string) =>
+    JSON.stringify({ model, stream: true, temperature: 0.7, max_tokens: 3072, messages: [{ role: "system", content: systemText }, ...messages] });
+  for (const model of rotateArr(REASON_GROQ, rot)) {
+    for (const key of rotateArr(groqKeys(env), rot)) {
       try {
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-          body: payload(model),
+          body: groqBody(model),
         });
         if (res.ok && res.body) {
-          upstream = res;
-          break outer;
+          return makeResponse(res, (d, emit) => {
+            try {
+              const delta = (JSON.parse(d) as { choices?: { delta?: { reasoning?: string; content?: string } }[] }).choices?.[0]?.delta;
+              if (delta?.reasoning) emit("thought", delta.reasoning);
+              if (delta?.content) emit("answer", delta.content);
+            } catch {
+              /* parziale */
+            }
+          });
         }
-        lastErr = `${model}:${res.status}`;
         if (res.status === 400 || res.status === 404) break;
-      } catch (e) {
-        lastErr = `${model}:${(e as Error).message}`;
+      } catch {
+        /* prossima combinazione */
       }
     }
   }
-  if (!upstream || !upstream.body) {
-    return json({ error: "ragionamento non disponibile", detail: lastErr }, 502, cors);
+
+  // 2) GEMINI come rete (quando Groq è esaurito/sotto sforzo). Più lento ma non
+  //    si perde nulla: tutta l'energia disponibile entra in gioco.
+  const geminiKeysArr = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+  for (const model of rotateArr(REASON_GEMINI, rot)) {
+    const gen: Record<string, unknown> = { temperature: 0.7, maxOutputTokens: 3072 };
+    if (model.startsWith("gemini-2.5")) gen.thinkingConfig = { includeThoughts: true, thinkingBudget: -1 };
+    const reqBody = JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents, generationConfig: gen });
+    for (const key of rotateArr(geminiKeysArr, rot)) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          return makeResponse(res, (d, emit) => {
+            try {
+              const j = JSON.parse(d) as GeminiResp;
+              for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+                if (!p.text) continue;
+                emit(p.thought ? "thought" : "answer", p.text);
+              }
+            } catch {
+              /* parziale */
+            }
+          });
+        }
+        if (res.status === 400 || res.status === 404) break;
+      } catch {
+        /* prossima combinazione */
+      }
+    }
   }
 
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buf = "";
-  let answer = "";
-  const transform = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      buf += decoder.decode(chunk, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() ?? "";
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith("data:")) continue;
-        const d = t.slice(5).trim();
-        if (!d || d === "[DONE]") continue;
-        try {
-          const delta = (JSON.parse(d) as { choices?: { delta?: { reasoning?: string; content?: string } }[] })
-            .choices?.[0]?.delta;
-          if (delta?.reasoning)
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "thought", d: delta.reasoning })}\n\n`));
-          if (delta?.content) {
-            answer += delta.content;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "answer", d: delta.content })}\n\n`));
-          }
-        } catch {
-          /* frammento parziale, ignora */
-        }
-      }
-    },
-    flush(controller) {
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer));
-    },
-  });
-
-  return new Response(upstream.body.pipeThrough(transform), {
-    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
-  });
+  return json({ error: "ragionamento non disponibile" }, 502, cors);
 }
 
 // ── /api/see — OnlyType: WhyChat GUARDA il foglio (Gemini multimodale) e lo
