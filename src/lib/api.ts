@@ -160,6 +160,29 @@ export async function deepThink(
   }
 }
 
+// ── Geocoding keyless (open-meteo) per i pin di WhyEarth ──────────────────────
+export interface GeoPlace {
+  name: string;
+  country?: string;
+  lat: number;
+  lng: number;
+}
+export async function geocodePlace(query: string): Promise<GeoPlace | null> {
+  const q = query.trim();
+  if (!q) return null;
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=it&format=json`,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as { results?: { name: string; country?: string; latitude: number; longitude: number }[] };
+    const r = d.results?.[0];
+    return r ? { name: r.name, country: r.country, lat: r.latitude, lng: r.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Plan (P5/P6): scompone un compito in passi mostrati come timeline agente ──
 export interface PlanStepData {
   title: string;
