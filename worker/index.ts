@@ -591,6 +591,101 @@ function geminiModels(env: Env): string[] {
   return list.length ? list : DEFAULT_GEMINI_MODELS;
 }
 
+// ── /api/reason — ragionamento VELOCE su Groq (modelli reasoning, stile DeepSeek).
+// Gemini è troppo lento/bufferato (~22s) per il reasoning live; Groq reasoning
+// streamma pensiero + risposta in ~0.3s. L'uscita resta di Groq (lui orchestra).
+// SSE: {t:"thought"|"answer", d} come /api/think.
+const REASON_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+
+async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { messages?: unknown; visitorId?: unknown; name?: unknown; mode?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const messages = sanitizeMessages(body.messages);
+  if (!messages) return json({ error: "messaggi non validi" }, 400, cors);
+  const name = String(body.name ?? "").slice(0, 80);
+  const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
+  const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
+  const systemText = SOUL + BEHAVIOR + nowContext() + (name ? `\n\n[Parli con: ${name}]` : "") + modeHint;
+
+  const payload = (model: string) =>
+    JSON.stringify({
+      model,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 3072,
+      messages: [{ role: "system", content: systemText }, ...messages],
+    });
+
+  let upstream: Response | null = null;
+  let lastErr = "";
+  outer: for (const model of REASON_MODELS) {
+    for (const key of groqKeys(env)) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: payload(model),
+        });
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+        lastErr = `${model}:${res.status}`;
+        if (res.status === 400 || res.status === 404) break;
+      } catch (e) {
+        lastErr = `${model}:${(e as Error).message}`;
+      }
+    }
+  }
+  if (!upstream || !upstream.body) {
+    return json({ error: "ragionamento non disponibile", detail: lastErr }, 502, cors);
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buf = "";
+  let answer = "";
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buf += decoder.decode(chunk, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const delta = (JSON.parse(d) as { choices?: { delta?: { reasoning?: string; content?: string } }[] })
+            .choices?.[0]?.delta;
+          if (delta?.reasoning)
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "thought", d: delta.reasoning })}\n\n`));
+          if (delta?.content) {
+            answer += delta.content;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: "answer", d: delta.content })}\n\n`));
+          }
+        } catch {
+          /* frammento parziale, ignora */
+        }
+      }
+    },
+    flush(controller) {
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(transform), {
+    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+}
+
 // ── /api/see — OnlyType: WhyChat GUARDA il foglio (Gemini multimodale) e lo
 // rappresenta/ragiona in PAROLE. È il tool dedicato alla modalità OnlyType:
 // stesso pattern SSE delle altre risposte Gemini, ma con l'immagine nel contesto.
@@ -1177,6 +1272,7 @@ export default {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
       if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env, ctx);
+      if (url.pathname === "/api/reason" && req.method === "POST") return await handleReason(req, env, ctx);
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);
       if (url.pathname === "/api/group/predict" && req.method === "POST") return await handleGroupPredict(req, env, ctx);
       if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);

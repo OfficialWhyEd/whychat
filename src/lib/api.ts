@@ -222,6 +222,45 @@ export async function deepThink(
   }
 }
 
+/**
+ * Ragionamento VELOCE su Groq (modello reasoning, stile DeepSeek): pensiero +
+ * risposta in streaming a ~0.3s. Stessa interfaccia di deepThink ma è Groq a
+ * orchestrare e a produrre l'uscita. `mode` passa l'hint di modalità (es. canvas).
+ */
+export async function reasonGroq(
+  messages: ChatMessage[],
+  onThought: (delta: string) => void,
+  onAnswer: (delta: string) => void,
+  signal?: AbortSignal,
+  mode = "chat",
+): Promise<void> {
+  const res = await postWithRetry("/api/reason", { messages, mode, visitorId: visitorId(), name: getName() }, signal);
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const d = t.slice(5).trim();
+      if (!d || d === "[DONE]") continue;
+      try {
+        const ev = JSON.parse(d) as { t?: string; d?: string };
+        if (ev.t === "thought" && ev.d) onThought(ev.d);
+        else if (ev.t === "answer" && ev.d) onAnswer(ev.d);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
+}
+
 // ── Group Prediction (beta): simulazione a più agenti stile MiroFish ──────────
 export interface GroupAgentMeta {
   id: string;
