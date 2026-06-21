@@ -626,12 +626,15 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
 - Se è UI / sito / gioco / visualizzazione / diagramma → emetti un artifact \`\`\`whyart (HTML+CSS+JS autosufficiente, estetica WhyEd dark) che lo costruisce DAVVERO e funzionante.
 - Se è un disegno / forma / logo → un artifact \`\`\`whyart con un SVG pulito che lo ricrea.
 - Se è un'equazione, un calcolo o una formula → risolvilo passo-passo e dai il risultato netto.
-- Una riga per dire cosa hai capito dallo sketch, POI crea. Se il foglio è troppo vago, fa' UNA domanda secca ma proponi comunque una prima versione. Mai limitarti a descrivere: qui si COSTRUISCE.`;
+- Una riga per dire cosa hai capito dallo sketch, POI crea. Se il foglio è troppo vago, fa' UNA domanda secca ma proponi comunque una prima versione. Mai limitarti a descrivere: qui si COSTRUISCE.
+- VELOCITÀ: per uno sketch semplice rispondi SUBITO, senza preamboli né ragionamenti lunghi. Ragiona di più solo se il disegno è davvero complesso. L'utente vuole risposte rapide.`;
 
   const reqBody = JSON.stringify({
     systemInstruction: { parts: [{ text: systemText }] },
     contents,
-    generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
+    // thinkingBudget 0 = niente ragionamento esteso → OnlyType è VELOCE sulle
+    // cose semplici (Gemini ragiona comunque inline per i build complessi).
+    generationConfig: { temperature: 0.8, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
   });
 
   const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];

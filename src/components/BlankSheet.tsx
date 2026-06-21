@@ -248,6 +248,7 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     setChat((c) => [...c, userLine, aiLine]);
     setChatInput("");
     setBusy(true);
+    setCollapsed(true); // all'invio il foglio si richiude (animato) → spazio alla risposta
     try {
       let acc = "";
       await seeSheet(img, prompt, history, (d) => {
@@ -274,10 +275,11 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-2">
-      {/* testata a tendina: apre/chiude il foglio per dare spazio alla chat */}
+      {/* testata: tendina (sx) + ESCI FUORI dal foglio (dx) → non copre il disegno */}
+      <div className="flex shrink-0 items-center justify-between gap-2">
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="glass mono flex shrink-0 items-center gap-2 self-start rounded-full px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-paper"
+        className="glass mono flex items-center gap-2 rounded-full px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-paper"
         title={collapsed ? "Riapri il foglio" : "Richiudi il foglio"}
       >
         <svg
@@ -295,6 +297,15 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
         </svg>
         FOGLIO {collapsed ? "· riapri" : ""}
       </button>
+        {onExit && (
+          <button
+            onClick={onExit}
+            className="mono rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] px-2.5 py-1 text-[0.5rem] text-faint backdrop-blur transition hover:border-signal/50 hover:text-paper"
+          >
+            ESCI ✕
+          </button>
+        )}
+      </div>
 
       {/* il foglio (canvas + strumenti) — display:none quando a tendina, così il
           disegno resta in memoria e non si perde */}
@@ -304,14 +315,6 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
         }`}
       >
         <div ref={wrapRef} className="glass relative flex-1 overflow-hidden rounded-3xl">
-          {onExit && (
-            <button
-              onClick={onExit}
-              className="mono absolute left-4 top-4 z-10 rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] px-2.5 py-1 text-[0.5rem] text-faint backdrop-blur transition hover:border-signal/50 hover:text-paper"
-            >
-              ESCI ✕
-            </button>
-          )}
           <canvas
             ref={canvasRef}
             onPointerDown={onDown}
