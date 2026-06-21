@@ -1,11 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { renderMarkdown } from "../lib/markdown";
+import { speak, stop as ttsStop, ttsSupported } from "../lib/tts";
 import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
 import { ShiningText } from "./ShiningText";
 import { WLoader } from "./WLoader";
 import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
+
+// micro-azioni che scorrono mentre WhyChat prepara la risposta (stile Claude Code)
+const THINK_PHASES = [
+  "Leggo la richiesta",
+  "Collego le idee",
+  "Cerco il filo",
+  "Soppeso le parole",
+  "Compongo",
+  "Affino",
+  "Rileggo",
+];
 
 export interface Message {
   id: string;
@@ -19,6 +31,37 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+
+  // se il messaggio sparisce/cambia mentre parla, ferma la voce
+  useEffect(() => () => ttsStop(), []);
+
+  const toggleSpeak = () => {
+    if (speaking) {
+      ttsStop();
+      setSpeaking(false);
+    } else {
+      speak(msg.content, setSpeaking);
+    }
+  };
+
+  // Ragionamento "vivo" stile Claude Code: non solo "sto ragionando" ma cosa sta
+  // facendo davvero. Se c'è ragionamento in streaming (deep) mostro l'ultima riga
+  // reale; altrimenti ciclo micro-azioni personalizzate.
+  const [phaseI, setPhaseI] = useState(0);
+  const thinking = !!msg.streaming && !msg.content;
+  useEffect(() => {
+    if (!thinking) return;
+    const id = setInterval(() => setPhaseI((i) => (i + 1) % THINK_PHASES.length), 1600);
+    return () => clearInterval(id);
+  }, [thinking]);
+  const lastThought = msg.thoughts
+    ? (msg.thoughts.split(/\n+/).filter((s) => s.trim()).pop() || "")
+        .replace(/[#*_>`\-]+/g, "")
+        .trim()
+        .slice(0, 90)
+    : "";
+  const thinkingLabel = lastThought || THINK_PHASES[phaseI];
 
   const copy = async () => {
     try {
@@ -72,10 +115,10 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
           </details>
         )}
 
-        {msg.streaming && !msg.content ? (
+        {thinking ? (
           <div className="flex items-center gap-2 text-ember">
             <WLoader size={20} />
-            <ShiningText text="Sto ragionando…" className="text-[0.95rem]" />
+            <ShiningText text={`${thinkingLabel}…`} className="text-[0.95rem]" />
           </div>
         ) : (
           <>
@@ -101,6 +144,23 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
         {/* azioni sotto la risposta (solo a risposta completa) */}
         {!msg.streaming && msg.content && (
           <div className="mt-2.5 flex items-center gap-0.5">
+            {ttsSupported() && (
+              <button
+                onClick={toggleSpeak}
+                title={speaking ? "Ferma voce" : "Ascolta"}
+                className={`grid h-7 w-7 place-items-center rounded-md transition hover:bg-[rgba(242,239,233,0.06)] ${speaking ? "text-ember" : "text-faint hover:text-paper"}`}
+              >
+                {speaking ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M8 5v14l11-7z" fill="currentColor" />
+                  </svg>
+                )}
+              </button>
+            )}
             <button
               onClick={copy}
               title={copied ? "Copiato" : "Copia"}

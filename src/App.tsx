@@ -19,6 +19,7 @@ import { streamChat, deepThink, type ChatMessage as ApiMsg } from "./lib/api";
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
+import { speak, getTtsAuto, setTtsAuto, ttsSupported } from "./lib/tts";
 
 let counter = 0;
 const uid = () => `m${++counter}_${Date.now().toString(36)}`;
@@ -44,6 +45,9 @@ function Chat() {
   const [webSearch, setWebSearch] = useState(false);
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
+  const [autoTts, setAutoTtsState] = useState(getTtsAuto);
+  const autoTtsRef = useRef(autoTts);
+  autoTtsRef.current = autoTts;
   // stato del pannello: ricorda come l'hai lasciato (aperto/chiuso); default per
   // viewport solo la prima volta
   const [sidebar, setSidebar] = useState(() => {
@@ -218,6 +222,7 @@ function Chat() {
           ctrl.signal,
         );
         apply(true);
+        if (autoTtsRef.current) speak(answer);
       } else {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -234,6 +239,7 @@ function Chat() {
           webSearch,
         );
         patch(acc, true);
+        if (autoTtsRef.current) speak(acc);
       }
       setChats((prev) => {
         saveChats(prev);
@@ -375,9 +381,37 @@ function Chat() {
             </svg>
           </button>
           <ModelSelector model={model} onModel={setModel} />
+          {ttsSupported() && (
+            <button
+              onClick={() => {
+                const next = !autoTts;
+                setAutoTtsState(next);
+                setTtsAuto(next);
+              }}
+              title={autoTts ? "Voce automatica attiva" : "Voce automatica disattivata"}
+              aria-pressed={autoTts}
+              className={`ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
+                autoTts
+                  ? "border-ember/50 text-ember"
+                  : "border-[var(--color-line2)] text-faint hover:text-paper"
+              }`}
+            >
+              {autoTts ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                  <path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                  <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          )}
           <button
             onClick={askName}
-            className="mono ml-auto max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+            className="mono max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>

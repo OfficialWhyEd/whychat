@@ -1,7 +1,5 @@
-import { motion } from "framer-motion";
 import { relativeTime, type Chat } from "../lib/chats";
-import SoulOrb from "./SoulOrb";
-import Wordmark from "./Wordmark";
+import { DiaText } from "./effects/DiaText";
 import { MODES, type Mode } from "./CommandComposer";
 import { ProtocolBadge } from "./ProtocolBadge";
 
@@ -25,7 +23,6 @@ export default function Sidebar({
   chats,
   activeId,
   open,
-  streaming,
   onSelect,
   onNew,
   onDelete,
@@ -49,16 +46,15 @@ export default function Sidebar({
         }`}
         style={{ willChange: "transform,width" }}
       >
-        {/* brand: orb + wordmark, con chiusura sidebar */}
+        {/* brand: solo la scritta WhyChat, con l'effetto dia (niente orb) */}
         <div className="flex items-center gap-2 px-3 pb-3 pt-3.5">
-          <motion.div
-            className="-my-1 shrink-0"
-            animate={{ y: [0, -3.5, 0], scale: [1, 1.03, 1] }}
-            transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <SoulOrb size={40} active={streaming} />
-          </motion.div>
-          <Wordmark className="h-[22px] shrink-0" />
+          <DiaText
+            text="WhyChat"
+            repeat
+            repeatDelay={7}
+            duration={1.6}
+            className="font-display text-[1.4rem] tracking-tight"
+          />
           <div className="flex-1" />
           <button
             onClick={onClose}
