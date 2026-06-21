@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { LiquidMetalButton } from "./ui/liquid-metal-button";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 
@@ -124,6 +124,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const ref = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const reduce = useReducedMotion();
   // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
   const armed = value.trim().length > 0 && !disabled;
   // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
@@ -250,10 +251,20 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
       <div ref={barRef} className="relative" style={{ "--tts": "0" } as React.CSSProperties}>
+        {/* rim liquid-glass (Apple): bordo vetro sempre presente — i puntini dietro
+            rifrangono attraverso .glass, qui si rifinisce solo il contorno */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-[1] rounded-[26px]"
+          style={{
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.34), inset 0 0 0 1px rgba(255,255,255,0.09), inset 0 -10px 22px -12px rgba(0,0,0,0.55), inset 0 1px 10px -6px rgba(255,255,255,0.4), 0 1px 0 rgba(255,255,255,0.05)",
+          }}
+        />
         {/* contorno reattivo al TTS: bordo + alone che pulsano con la voce reale */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[26px] border"
+          className="pointer-events-none absolute inset-0 z-[1] rounded-[26px] border"
           style={{
             borderColor: "rgba(240,163,106,calc(var(--tts,0) * 0.85))",
             boxShadow:
@@ -396,10 +407,64 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               <span className="block h-3 w-3 rounded-[3px] bg-paper" />
             </button>
           ) : (
-            // send: liquid metal button (shader @paper-design) — invia il messaggio
-            <div className={`shrink-0 transition-opacity ${value.trim() ? "opacity-100" : "opacity-40"}`}>
-              <LiquidMetalButton viewMode="icon" onClick={submit} />
-            </div>
+            <OriginButton
+              onClick={submit}
+              disabled={disabled || !value.trim()}
+              title="Invia"
+              fill="rgba(255,228,198,0.42)"
+              fillText="#0a0908"
+              style={{
+                background:
+                  "radial-gradient(125% 120% at 50% 6%, #ffd2a4 0%, #f0a36a 24%, #d4582c 56%, #b23d1d 80%, #8a2f17 100%)",
+              }}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#0a0908] outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
+                armed ? "shadow-[0_0_22px_-4px_rgba(224,103,63,0.55)]" : ""
+              }`}
+              overlay={
+                <>
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-soft-light"
+                    style={{
+                      background:
+                        "repeating-linear-gradient(118deg, rgba(255,238,214,0.12) 0px, rgba(120,42,22,0.12) 1.6px, rgba(255,238,214,0.12) 3.2px)",
+                      opacity: 0.55,
+                    }}
+                  />
+                  <motion.span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-screen"
+                    style={{
+                      background:
+                        "radial-gradient(36% 28% at 50% 40%, rgba(255,248,236,0.85), rgba(255,210,170,0.18) 55%, transparent 72%)",
+                    }}
+                    animate={reduce ? undefined : { x: [-5, 6, -5], y: [-4, 4, -4] }}
+                    transition={{
+                      x: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
+                      y: { duration: 7.5, repeat: Infinity, ease: "easeInOut" },
+                    }}
+                  />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full"
+                    style={{ zIndex: 1, background: "radial-gradient(38% 30% at 35% 18%, rgba(255,250,242,0.72), transparent 60%)" }}
+                  />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 rounded-full"
+                    style={{
+                      zIndex: 1,
+                      boxShadow:
+                        "inset 0 1.5px 1px rgba(255,236,214,0.55), inset 0 0 0 1px rgba(255,230,205,0.14), inset 0 -3px 7px -2px rgba(74,22,10,0.55)",
+                    }}
+                  />
+                </>
+              }
+            >
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" className="relative">
+                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </OriginButton>
           )}
         </div>
       </div>
