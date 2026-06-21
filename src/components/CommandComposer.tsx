@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import OriginButton from "./OriginButton";
+import { motion, AnimatePresence } from "framer-motion";
+import { LiquidMetalButton } from "./ui/liquid-metal-button";
 import { Typewriter } from "./Typewriter";
+import { voice } from "../lib/tts";
 
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
@@ -105,8 +106,8 @@ interface Props {
   onTogglePlan?: () => void;
 }
 
-// la plan mode ha senso solo nelle modalità testuali
-const PLANNABLE: Mode[] = ["chat", "canvas", "learn"];
+// plan mode disponibile in TUTTE le modalità non-beta (utile ovunque)
+const PLANNABLE: Mode[] = ["chat", "canvas", "deep", "learn"];
 // euristica "domanda complessa/lunga" → suggerisci di pianificare
 function looksComplex(t: string): boolean {
   const s = t.trim();
@@ -121,8 +122,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const reduce = useReducedMotion();
   // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
   const armed = value.trim().length > 0 && !disabled;
   // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
@@ -134,6 +135,26 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, [value]);
+
+  // Il contorno della barra reagisce al TTS: una variabile CSS --tts (0..1) segue
+  // l'ampiezza reale della voce e accende bordo + alone, sincronizzati col parlato.
+  useEffect(() => {
+    let raf = 0;
+    const run = () => {
+      const el = barRef.current;
+      if (el) el.style.setProperty("--tts", voice.level.toFixed(3));
+      if (voice.speaking || voice.level > 0.01) raf = requestAnimationFrame(run);
+      else if (el) el.style.setProperty("--tts", "0");
+    };
+    const unsub = voice.subscribe(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(run);
+    });
+    return () => {
+      unsub();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const submit = () => {
     const t = value.trim();
@@ -228,6 +249,17 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       </AnimatePresence>
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
+      <div ref={barRef} className="relative" style={{ "--tts": "0" } as React.CSSProperties}>
+        {/* contorno reattivo al TTS: bordo + alone che pulsano con la voce reale */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[26px] border"
+          style={{
+            borderColor: "rgba(240,163,106,calc(var(--tts,0) * 0.85))",
+            boxShadow:
+              "0 0 calc(var(--tts,0) * 46px) calc(var(--tts,0) * 8px) rgba(240,163,106,calc(var(--tts,0) * 0.5)), inset 0 0 calc(var(--tts,0) * 22px) rgba(201,75,37,calc(var(--tts,0) * 0.35))",
+          }}
+        />
       <div
         className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
           armed
@@ -261,8 +293,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           />
         </div>
 
-        {/* riga 2 — i controlli, allineati e simmetrici */}
-        <div className="mt-2 flex items-center gap-2">
+        {/* riga 2 — i controlli; flex-wrap così su telefono non sforano mai */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {/* modalità → apre la palette */}
           <motion.button
             onClick={() => setMenu((s) => !s)}
@@ -364,73 +396,13 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               <span className="block h-3 w-3 rounded-[3px] bg-paper" />
             </button>
           ) : (
-            <OriginButton
-              onClick={submit}
-              disabled={disabled || !value.trim()}
-              title="Invia"
-              // hover translucido: un alito caldo che segue il cursore, il metallo resta visibile
-              fill="rgba(255,228,198,0.42)"
-              fillText="#0a0908"
-              style={{
-                // Metallo fuso: top illuminato (ambra) che cola verso il cremisi profondo.
-                background:
-                  "radial-gradient(125% 120% at 50% 6%, #ffd2a4 0%, #f0a36a 24%, #d4582c 56%, #b23d1d 80%, #8a2f17 100%)",
-              }}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#0a0908] outline-none transition-shadow duration-300 focus-visible:ring-2 focus-visible:ring-ember/60 disabled:opacity-35 ${
-                armed ? "shadow-[0_0_22px_-4px_rgba(224,103,63,0.55)]" : ""
-              }`}
-              overlay={
-                <>
-                  {/* metallo spazzolato: micro-righe parallele STATICHE (niente rotazione = niente radar) */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-soft-light"
-                    style={{
-                      background:
-                        "repeating-linear-gradient(118deg, rgba(255,238,214,0.12) 0px, rgba(120,42,22,0.12) 1.6px, rgba(255,238,214,0.12) 3.2px)",
-                      opacity: 0.55,
-                    }}
-                  />
-                  {/* riflesso liquido che VAGA: hotspot morbido, moto Lissajous (x e y a frequenze
-                      diverse) → il metallo "respira" la luce, non la spazza in cerchio */}
-                  <motion.span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-full mix-blend-screen"
-                    style={{
-                      background:
-                        "radial-gradient(36% 28% at 50% 40%, rgba(255,248,236,0.85), rgba(255,210,170,0.18) 55%, transparent 72%)",
-                    }}
-                    animate={reduce ? undefined : { x: [-5, 6, -5], y: [-4, 4, -4] }}
-                    transition={{
-                      x: { duration: 5.5, repeat: Infinity, ease: "easeInOut" },
-                      y: { duration: 7.5, repeat: Infinity, ease: "easeInOut" },
-                    }}
-                  />
-                  {/* specular fisso alto-sinistra: la sorgente di luce, dà la curvatura */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-full"
-                    style={{ zIndex: 1, background: "radial-gradient(38% 30% at 35% 18%, rgba(255,250,242,0.72), transparent 60%)" }}
-                  />
-                  {/* fresnel rim + bevel: highlight ambra in alto, ombra calda sotto */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-full"
-                    style={{
-                      zIndex: 1,
-                      boxShadow:
-                        "inset 0 1.5px 1px rgba(255,236,214,0.55), inset 0 0 0 1px rgba(255,230,205,0.14), inset 0 -3px 7px -2px rgba(74,22,10,0.55)",
-                    }}
-                  />
-                </>
-              }
-            >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" className="relative">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </OriginButton>
+            // send: liquid metal button (shader @paper-design) — invia il messaggio
+            <div className={`shrink-0 transition-opacity ${value.trim() ? "opacity-100" : "opacity-40"}`}>
+              <LiquidMetalButton viewMode="icon" onClick={submit} />
+            </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
