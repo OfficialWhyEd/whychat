@@ -6,7 +6,7 @@ import { Typewriter } from "./Typewriter";
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem";
 
 interface ModeDef {
   id: Mode;
@@ -55,6 +55,25 @@ export const MODES: ModeDef[] = [
     tag: "beta",
     icon: I("M12 3 21 19 3 19Z", <circle cx="12" cy="13.5" r="1.5" />),
   },
+  {
+    id: "music",
+    label: "WhyMusic",
+    desc: "Analizza una traccia nel dettaglio",
+    tag: "beta",
+    icon: I("M9 18V5l12-2v13", (
+      <>
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="16" r="3" />
+      </>
+    )),
+  },
+  {
+    id: "ecosystem",
+    label: "WhyEcosystem",
+    desc: "Simulazioni di natura, dal vivo",
+    tag: "beta",
+    icon: I("M12 2a9 9 0 0 0-9 9c0 5 4 9 9 11 5-2 9-6 9-11a9 9 0 0 0-9-9zM12 7v8M8 11h8", undefined),
+  },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
@@ -82,9 +101,23 @@ interface Props {
   streaming: boolean;
   search?: boolean;
   onToggleSearch?: () => void;
+  plan?: boolean;
+  onTogglePlan?: () => void;
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch }: Props) {
+// la plan mode ha senso solo nelle modalità testuali
+const PLANNABLE: Mode[] = ["chat", "canvas", "learn"];
+// euristica "domanda complessa/lunga" → suggerisci di pianificare
+function looksComplex(t: string): boolean {
+  const s = t.trim();
+  if (s.length > 180) return true;
+  if ((s.match(/\?/g)?.length ?? 0) >= 2) return true;
+  return /\b(progett\w+|costruisc\w+|costruire|pianific\w+|analizz\w+|confront\w+|organizz\w+|strategi\w+|piano|passo\s*passo|step by step|in dettaglio|tutti i passaggi)\b/i.test(
+    s,
+  );
+}
+
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan }: Props) {
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -92,6 +125,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const reduce = useReducedMotion();
   // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
   const armed = value.trim().length > 0 && !disabled;
+  // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
+  const suggestPlan = !plan && !!onTogglePlan && PLANNABLE.includes(mode) && looksComplex(value);
 
   useEffect(() => {
     const el = ref.current;
@@ -130,7 +165,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               {/* fondo solido: il menu non lascia trasparire la chat dietro */}
               <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[#141009]/92" />
               <div className="relative mono px-4 pb-1 pt-3 text-[0.5rem] text-faint">MODALITÀ</div>
-              <ul className="relative px-1.5 pb-2">
+              <ul className="scroll-thin relative max-h-[min(58vh,420px)] overflow-y-auto px-1.5 pb-2">
                 {MODES.map((m) => {
                   const active = m.id === mode;
                   return (
@@ -161,6 +196,34 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               </ul>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Suggerimento plan mode: appare per domande complesse, si accetta con un tap */}
+      <AnimatePresence>
+        {suggestPlan && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.22, ease: EASE_OUT }}
+            className="mb-2 flex items-center gap-2 rounded-xl border border-ember/30 bg-[rgba(240,163,106,0.08)] px-3 py-2"
+          >
+            <span className="text-ember">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className="flex-1 text-[0.74rem] leading-snug text-dim">
+              Domanda impegnativa — vuoi che <span className="text-paper">pianifichi</span> prima?
+            </span>
+            <button
+              onClick={onTogglePlan}
+              className="mono shrink-0 rounded-full border border-ember/50 bg-[rgba(240,163,106,0.14)] px-2.5 py-1 text-[0.55rem] text-ember transition hover:bg-[rgba(240,163,106,0.22)]"
+            >
+              PIANIFICA
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -250,6 +313,39 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
                   >
                     CERCA
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          )}
+
+          {/* tasto: plan mode — pianifica prima di rispondere (timeline agente) */}
+          {onTogglePlan && PLANNABLE.includes(mode) && (
+            <motion.button
+              type="button"
+              onClick={onTogglePlan}
+              title="Plan mode: pianifica prima di rispondere"
+              whileTap={{ scale: 0.93 }}
+              transition={{ type: "spring", stiffness: 420, damping: 16 }}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
+                plan
+                  ? "border-ember/50 bg-[rgba(240,163,106,0.14)] text-ember hover:bg-[rgba(240,163,106,0.22)]"
+                  : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
+              </svg>
+              <AnimatePresence>
+                {plan && (
+                  <motion.span
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: "auto", opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
+                  >
+                    PIANO
                   </motion.span>
                 )}
               </AnimatePresence>

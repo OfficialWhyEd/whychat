@@ -1309,6 +1309,95 @@ async function handleVault(req: Request, env: Env): Promise<Response> {
   return json({ count: entries.filter(Boolean).length, entries: entries.filter(Boolean) }, 200, cors);
 }
 
+// ── /api/plan — il PIANIFICATORE: scompone un compito in passi (stile agente) ──
+const PLAN_TOOLS = ["analisi", "ricerca", "sintesi", "codice", "verifica"];
+async function handlePlan(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { messages?: unknown; task?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const messages = sanitizeMessages(body.messages) ?? [];
+  const task =
+    (String(body.task ?? "").slice(0, MAX_MESSAGE_CHARS) ||
+      [...messages].reverse().find((m) => m.role === "user")?.content ||
+      "").trim();
+  if (!task) return json({ error: "task vuoto" }, 400, cors);
+
+  const sys = `Sei il PIANIFICATORE di WhyChat. Scomponi il compito in 3-6 passi concreti e ordinati, come farebbe un agente che lavora (stile Claude Code). Per ogni passo dai: "title" brevissimo (max 6 parole, in italiano), "tool" tra [${PLAN_TOOLS.map((t) => `"${t}"`).join(", ")}], "detail" di UNA riga. Rispondi SOLO JSON: {"steps":[{"title":"...","tool":"...","detail":"..."}]}`;
+
+  let steps: { title: string; tool: string; detail: string }[] = [];
+  try {
+    const raw = await groqChat(env, sys, `Compito:\n${task}\n\nProduci il piano (solo JSON).`, {
+      temperature: 0.5,
+      maxTokens: 500,
+      json: true,
+    });
+    const parsed = JSON.parse(extractJson(raw)) as { steps?: unknown };
+    const arr = Array.isArray(parsed.steps) ? parsed.steps : [];
+    steps = arr
+      .slice(0, 6)
+      .map((s, i) => {
+        const o = s as { title?: unknown; tool?: unknown; detail?: unknown };
+        const tool = String(o.tool ?? "analisi");
+        return {
+          title: String(o.title ?? `Passo ${i + 1}`).slice(0, 80),
+          tool: PLAN_TOOLS.includes(tool) ? tool : "analisi",
+          detail: String(o.detail ?? "").slice(0, 200),
+        };
+      })
+      .filter((s) => s.title);
+  } catch {
+    steps = [];
+  }
+  if (!steps.length)
+    steps = [
+      { title: "Capisco la richiesta", tool: "analisi", detail: "Leggo e isolo l'obiettivo reale." },
+      { title: "Raccolgo il materiale", tool: "ricerca", detail: "Metto insieme ciò che serve." },
+      { title: "Compongo la risposta", tool: "sintesi", detail: "Costruisco il risultato finale." },
+    ];
+  return json({ steps }, 200, cors);
+}
+
+// ── /api/music — WhyMusic: analisi profonda di una traccia (metriche dal browser) ─
+async function handleMusic(req: Request, env: Env): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { features?: unknown; ask?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const f = body.features && typeof body.features === "object" ? body.features : {};
+  const ask = String(body.ask ?? "").slice(0, 2000);
+  const featText = JSON.stringify(f).slice(0, 1500);
+  const sys =
+    SOUL +
+    `\n\n[MODALITÀ WHYMUSIC] Sei un fonico e produttore esperto. Ti arrivano le METRICHE estratte da una traccia (analizzata nel browser dell'utente). Dai un'analisi PROFONDA e pratica in markdown:
+## Lettura tecnica
+(tempo/BPM, tonalità stimata, dinamica, bilanciamento spettrale, loudness)
+## Cosa funziona
+## Cosa sistemare
+(mosse concrete: EQ in Hz, compressione, stereo, headroom, arrangiamento)
+## Idee di produzione
+(riarrangiamento, sound design, riferimenti)
+Concreto, numeri quando puoi, niente fuffa.`;
+  let text = "";
+  try {
+    text = await groqChat(
+      env,
+      sys,
+      `Metriche della traccia:\n${featText}\n\n${ask ? `Richiesta specifica: ${ask}\n\n` : ""}Analizza in profondità.`,
+      { temperature: 0.7, maxTokens: 1300 },
+    );
+  } catch (e) {
+    return json({ error: "L'analisi non è disponibile ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
+  }
+  return json({ text }, 200, cors);
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -1331,6 +1420,8 @@ export default {
     try {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
+      if (url.pathname === "/api/plan" && req.method === "POST") return await handlePlan(req, env);
+      if (url.pathname === "/api/music" && req.method === "POST") return await handleMusic(req, env);
       if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env, ctx);
       if (url.pathname === "/api/reason" && req.method === "POST") return await handleReason(req, env, ctx);
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);

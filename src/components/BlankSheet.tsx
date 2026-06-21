@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { seeSheet, streamChat, reasonGroq, type ChatMessage as ApiMsg } from "../lib/api";
-import ChatMessageView from "./ChatMessage";
+import { motion, AnimatePresence } from "framer-motion";
+import { seeSheet } from "../lib/api";
+import { renderMarkdown } from "../lib/markdown";
+import { parseSegments } from "../lib/artifacts";
+import Artifact from "./Artifact";
+import { ShiningText } from "./ShiningText";
+import { WLoader } from "./WLoader";
 
 /**
- * BlankSheet — la modalità OnlyType (beta): un foglio bianco dove fai quello che
- * vuoi. Disegni con penna, scrivi testo, cancelli — perfetto con mouse, trackpad
- * e dito (Pointer Events + touch-action none). La barra in basso è lo strumento.
- *
- * In più: WhyChat GUARDA il foglio e lo rappresenta in PAROLE (chat con visione,
- * Gemini multimodale via /api/see). Il foglio è richiudibile a tendina per dare
- * spazio alla conversazione. Il placeholder sparisce in motion-blur quando inizi
- * a disegnare e riappare quando il foglio torna vuoto.
+ * BlankSheet — la modalità OnlyType: il DISEGNO è il prompt. Disegni/scrivi su un
+ * foglio (penna, testo, gomma; mouse e dito), poi WhyChat GUARDA il disegno, lo
+ * descrive a parole e CREA ciò che rappresenta (sito/SVG/diagramma/gioco/formula).
+ * Il foglio è una tendina richiudibile; il placeholder svanisce con motion-blur
+ * appena disegni e riappare a foglio vuoto.
  */
 
 type Tool = "pen" | "text" | "eraser";
@@ -24,18 +26,10 @@ interface TextNode {
   color: string;
 }
 
-interface ChatLine {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  thoughts?: string; // ragionamento (quando Groq passa la palla a Gemini)
-}
-
-// Sessione serializzabile del foglio: disegno (dataURL) + testi + chat. Vive tra le conversazioni.
+// Sessione serializzabile del foglio: disegno (dataURL) + testi. Vive tra le conversazioni.
 export interface SheetSession {
   image: string | null;
   texts: TextNode[];
-  chat?: ChatLine[];
 }
 
 interface Props {
@@ -56,24 +50,19 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
   const [texts, setTexts] = useState<TextNode[]>(session?.texts ?? []);
   const nextId = useRef((session?.texts?.reduce((m, t) => Math.max(m, t.id), 0) ?? 0) + 1);
 
-  // foglio richiudibile (tendina) + traccia se c'è inchiostro (per il placeholder)
+  // OnlyType: il disegno → creazione
+  const [hasInk, setHasInk] = useState(!!session?.image);
   const [collapsed, setCollapsed] = useState(false);
-  const [inkEmpty, setInkEmpty] = useState(!session?.image);
-
-  // chat con visione: WhyChat guarda il foglio e risponde in parole
-  const [chat, setChat] = useState<ChatLine[]>(session?.chat ?? []);
-  const [chatInput, setChatInput] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
-  const chatNextId = useRef((session?.chat?.reduce((m, c) => Math.max(m, c.id), 0) ?? 0) + 1);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
-  const chatRef = useRef(chat);
-  chatRef.current = chat;
+  const [err, setErr] = useState("");
 
   // mirror dei testi per leggerli aggiornati dentro il timer di salvataggio
   const textsRef = useRef(texts);
   textsRef.current = texts;
   const persistTimer = useRef<number | undefined>(undefined);
-  // salva (debounced) disegno + testi + chat tra le conversazioni
+  // salva (debounced) disegno + testi tra le conversazioni
   const schedulePersist = () => {
     if (!onPersist) return;
     clearTimeout(persistTimer.current);
@@ -85,7 +74,7 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
       } catch {
         image = null;
       }
-      onPersist({ image, texts: textsRef.current, chat: chatRef.current });
+      onPersist({ image, texts: textsRef.current });
     }, 700);
   };
 
@@ -112,9 +101,6 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d")!;
     const fit = () => {
-      // guardia: se il foglio è nascosto (tendina) non ridimensionare → niente
-      // perdita del disegno quando clientWidth/Height vanno a 0.
-      if (!wrap.clientWidth || !wrap.clientHeight) return;
       const snap = canvas.width ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = wrap.clientWidth * dpr;
@@ -149,11 +135,6 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // tieni la chat scrollata in fondo quando arrivano messaggi
-  useEffect(() => {
-    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [chat]);
-
   const pos = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -164,11 +145,12 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
       const { x, y } = pos(e);
       const id = nextId.current++;
       setTexts((t) => [...t, { id, x, y, value: "", color }]);
+      setHasInk(true);
       schedulePersist();
       return;
     }
     drawing.current = true;
-    setInkEmpty(false); // hai iniziato a disegnare → il placeholder sparisce (motion blur)
+    setHasInk(true); // appena disegni, il placeholder svanisce (motion-blur)
     last.current = pos(e);
     try {
       (e.target as Element).setPointerCapture(e.pointerId);
@@ -202,335 +184,292 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     const c = canvasRef.current!;
     c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
     setTexts([]);
-    setInkEmpty(true); // foglio vuoto → il placeholder riappare
+    setHasInk(false);
+    setResult("");
+    setErr("");
     schedulePersist();
   };
 
-  // snapshot del foglio per la visione: ridotto e su fondo scuro così i tratti
-  // (colorati su trasparente) sono ben visibili al modello. JPEG leggero.
-  const snapshot = (): string => {
+  // compone disegno + testi su un canvas offscreen → dataURL (il "prompt" visivo)
+  const snapshot = (): string | null => {
     const c = canvasRef.current;
-    if (!c) return "";
-    const maxW = 1024;
-    const scale = Math.min(1, maxW / c.width);
+    const wrap = wrapRef.current;
+    if (!c || !wrap) return null;
     const off = document.createElement("canvas");
-    off.width = Math.max(1, Math.round(c.width * scale));
-    off.height = Math.max(1, Math.round(c.height * scale));
-    const octx = off.getContext("2d");
-    if (!octx) return "";
-    octx.fillStyle = "#100d0b";
-    octx.fillRect(0, 0, off.width, off.height);
-    octx.drawImage(c, 0, 0, off.width, off.height);
+    off.width = c.width;
+    off.height = c.height;
+    const o = off.getContext("2d");
+    if (!o) return null;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // fondo chiaro: i modelli di visione leggono meglio tratto scuro su chiaro
+    o.fillStyle = "#0a0908";
+    o.fillRect(0, 0, off.width, off.height);
+    o.drawImage(c, 0, 0);
+    o.setTransform(dpr, 0, 0, dpr, 0, 0);
+    o.textBaseline = "top";
+    for (const t of textsRef.current) {
+      if (!t.value.trim()) continue;
+      o.fillStyle = t.color;
+      o.font = "400 24px Outfit, system-ui, sans-serif";
+      o.fillText(t.value, t.x, t.y - 20);
+    }
     try {
-      return off.toDataURL("image/jpeg", 0.85);
+      return off.toDataURL("image/png");
     } catch {
-      return "";
+      return null;
     }
   };
 
-  const askSheet = async (text: string) => {
+  // il cuore di OnlyType: WhyChat guarda il disegno e CREA ciò che rappresenta
+  const create = async () => {
     if (busy) return;
-    // ROUTER: c'è un disegno? → serve la VISTA (Gemini, più lento ma necessario).
-    // Niente disegno (solo testo) → cosa semplice → Groq DIRETTO e velocissimo.
-    const hasDrawing = !inkEmpty || textsRef.current.length > 0;
-    const written = textsRef.current
-      .map((t) => t.value.trim())
-      .filter(Boolean)
-      .join(" · ");
-    const typed = text.trim();
-    if (!hasDrawing && !typed) return; // niente da fare
-    const prompt =
-      (typed || "Guarda il mio foglio: cosa vedi? Rappresenta in parole il disegno e l'idea dietro.") +
-      (written ? `\n\n[Testi scritti sul foglio: ${written}]` : "");
-
-    const userLine: ChatLine = { id: chatNextId.current++, role: "user", content: typed || "👁 descrivi il mio foglio" };
-    const aiLine: ChatLine = { id: chatNextId.current++, role: "assistant", content: "" };
-    const history: ApiMsg[] = chatRef.current.slice(-8).map((m) => ({ role: m.role, content: m.content }));
-
-    setChat((c) => [...c, userLine, aiLine]);
-    setChatInput("");
+    const img = snapshot();
+    if (!img || !hasInk) {
+      setErr("Disegna o scrivi qualcosa sul foglio, poi premi Crea.");
+      return;
+    }
+    setErr("");
     setBusy(true);
-    setCollapsed(true); // all'invio il foglio si richiude (animato) → spazio alla risposta
+    setResult("");
+    setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio al risultato
     let acc = "";
-    const onTok = (d: string) => {
-      acc += d;
-      setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: acc } : m)));
-    };
     try {
-      if (hasDrawing) {
-        const img = snapshot();
-        if (img) await seeSheet(img, prompt, history, onTok);
-      } else {
-        // Groq diretto (veloce). Ma è GROQ a decidere: se è semplice crea/risponde
-        // subito; se è davvero complesso scrive [[RAGIONA]] e passiamo a Gemini.
-        const groqPrompt =
-          prompt +
-          "\n\n(Sistema: se questa richiesta è semplice, creala/rispondi subito. Se invece è DAVVERO complessa e richiede ragionamento profondo, rispondi SOLO ed esattamente con [[RAGIONA]] e nient'altro.)";
-        await streamChat([...history, { role: "user", content: groqPrompt }], onTok, undefined, "canvas", "whychat-5.5", false);
-        if (acc.trim().toUpperCase().includes("[[RAGIONA")) {
-          // escalation decisa dal modello → ragionamento VELOCE su Groq (DeepSeek-style):
-          // pensiero + risposta in streaming, l'uscita resta di Groq.
-          acc = "";
-          setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: "", thoughts: "" } : m)));
-          let thoughts = "";
-          await reasonGroq(
-            [...history, { role: "user", content: prompt }],
-            (d) => {
-              thoughts += d;
-              setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, thoughts } : m)));
-            },
-            onTok,
-            undefined,
-            "canvas",
-          );
-        }
-      }
+      await seeSheet(
+        img,
+        prompt.trim() || "Guarda il disegno e crea ciò che rappresenta.",
+        [],
+        (d) => {
+          acc += d;
+          setResult(acc);
+        },
+      );
+      if (!acc.trim()) setResult("Non sono riuscito a leggere il disegno. Riprova con un tratto più netto.");
     } catch (e) {
-      const msg = `⚠ ${(e as Error).message}`;
-      setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: m.content || msg } : m)));
+      setErr(`⚠ ${(e as Error).message}`);
     } finally {
       setBusy(false);
-      schedulePersist();
     }
   };
-
-  const onChatKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (chatInput.trim() && !busy) askSheet(chatInput);
-    }
-  };
-
-  const showPlaceholder = inkEmpty && texts.length === 0;
 
   return (
-    <div className="flex h-full flex-col gap-2">
-      {/* testata: tendina (sx) + ESCI FUORI dal foglio (dx) → non copre il disegno */}
-      <div className="flex shrink-0 items-center justify-between gap-2">
-      <button
-        onClick={() => setCollapsed((v) => !v)}
-        className="glass mono flex items-center gap-2 rounded-full px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-paper"
-        title={collapsed ? "Riapri il foglio" : "Richiudi il foglio"}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`transition-transform duration-300 ${collapsed ? "-rotate-90" : ""}`}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-        FOGLIO {collapsed ? "· riapri" : ""}
-      </button>
+    <div className="flex h-full flex-col gap-3">
+      {/* header: esci + titolo + tendina del foglio */}
+      <div className="flex items-center gap-2">
         {onExit && (
           <button
             onClick={onExit}
-            className="mono rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] px-2.5 py-1 text-[0.5rem] text-faint backdrop-blur transition hover:border-signal/50 hover:text-paper"
+            className="mono rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] px-2.5 py-1 text-[0.5rem] text-faint transition hover:border-signal/50 hover:text-paper"
           >
             ESCI ✕
           </button>
         )}
+        <span className="mono text-[0.55rem] text-faint">ONLYTYPE · IL DISEGNO È IL PROMPT</span>
+        <span className="flex-1" />
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="mono flex items-center gap-1.5 rounded-full border border-[var(--color-line2)] px-2.5 py-1 text-[0.5rem] text-faint transition hover:text-paper"
+        >
+          {collapsed ? "MOSTRA FOGLIO" : "RIDUCI FOGLIO"}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className={`transition-transform duration-300 ${collapsed ? "rotate-180" : ""}`}>
+            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
-      {/* il foglio (canvas + strumenti) — display:none quando a tendina, così il
-          disegno resta in memoria e non si perde */}
+      {/* TENDINA del foglio: collassa morbida (no unmount → il disegno resta) */}
       <div
-        className={`flex min-h-0 flex-[3] flex-col gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[450ms] ease-out ${
-          collapsed ? "pointer-events-none max-h-0 -translate-y-1 opacity-0" : "max-h-[1200px] translate-y-0 opacity-100"
+        className={`grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          collapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
         }`}
       >
-        <div ref={wrapRef} className="glass relative flex-1 overflow-hidden rounded-3xl">
-          <canvas
-            ref={canvasRef}
-            onPointerDown={onDown}
-            onPointerMove={onMove}
-            onPointerUp={onUp}
-            onPointerEnter={() => showCursor(tool !== "text")}
-            onPointerLeave={() => {
-              onUp();
-              showCursor(false);
-            }}
-            className="absolute inset-0"
-            style={{ touchAction: "none", cursor: tool === "text" ? "text" : "none" }}
-          />
+        <div className="min-h-0 overflow-hidden">
+      <div ref={wrapRef} className="glass relative h-[min(54vh,520px)] overflow-hidden rounded-3xl">
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerEnter={() => showCursor(tool !== "text")}
+          onPointerLeave={() => {
+            onUp();
+            showCursor(false);
+          }}
+          className="absolute inset-0"
+          style={{ touchAction: "none", cursor: tool === "text" ? "text" : "none" }}
+        />
 
-          {/* Puntatore-pennello stile Photoshop: cerchio che mostra l'area esatta del
-              tratto e si ingrandisce/rimpicciolisce con lo spessore. Mosso via ref (no lag). */}
-          {tool !== "text" && (
-            <div
-              ref={cursorRef}
-              aria-hidden
-              className="pointer-events-none absolute left-0 top-0 rounded-full opacity-0"
-              style={{
-                width: ringSize,
-                height: ringSize,
-                border: `1.5px solid ${tool === "eraser" ? "rgba(242,239,233,0.85)" : color}`,
-                boxShadow: "0 0 0 1px rgba(10,9,8,0.55)",
-                transition: "width 110ms ease-in-out, height 110ms ease-in-out, border-color 120ms",
-                willChange: "transform",
-              }}
-            />
-          )}
-          {texts.map((t) => (
-            <textarea
-              key={t.id}
-              autoFocus
-              value={t.value}
-              onChange={(e) => {
-                setTexts((arr) => arr.map((n) => (n.id === t.id ? { ...n, value: e.target.value } : n)));
-                schedulePersist();
-              }}
-              onBlur={() => {
-                if (!t.value.trim()) setTexts((arr) => arr.filter((n) => n.id !== t.id));
-                schedulePersist();
-              }}
-              placeholder="scrivi…"
-              className="absolute resize-none overflow-hidden bg-transparent text-[1.5rem] leading-tight outline-none placeholder:text-faint/40"
-              style={{
-                left: t.x,
-                top: t.y - 20,
-                color: t.color,
-                minWidth: 60,
-                width: Math.max(60, t.value.length * 14),
-                fontFamily: "var(--font-sans)",
-              }}
-            />
-          ))}
-
-          {/* placeholder: sparisce in motion-blur quando inizi a disegnare, riappare a foglio vuoto */}
+        {/* Puntatore-pennello stile Photoshop: cerchio che mostra l'area esatta del
+            tratto e si ingrandisce/rimpicciolisce con lo spessore. Mosso via ref (no lag). */}
+        {tool !== "text" && (
           <div
-            className="pointer-events-none absolute inset-0 grid place-items-center"
+            ref={cursorRef}
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 rounded-full opacity-0"
             style={{
-              opacity: showPlaceholder ? 1 : 0,
-              filter: showPlaceholder ? "blur(0px)" : "blur(16px)",
-              transform: showPlaceholder ? "scale(1)" : "scale(1.06)",
-              transition: "opacity 480ms ease, filter 480ms ease, transform 480ms ease",
+              width: ringSize,
+              height: ringSize,
+              border: `1.5px solid ${tool === "eraser" ? "rgba(242,239,233,0.85)" : color}`,
+              boxShadow: "0 0 0 1px rgba(10,9,8,0.55)",
+              transition: "width 110ms ease-in-out, height 110ms ease-in-out, border-color 120ms",
+              willChange: "transform",
             }}
-          >
-            <p className="mono text-[0.6rem] text-faint">FOGLIO BIANCO · DISEGNA O SCRIVI · MOUSE E DITO</p>
-          </div>
-        </div>
+          />
+        )}
+        {texts.map((t) => (
+          <textarea
+            key={t.id}
+            autoFocus
+            value={t.value}
+            onChange={(e) => {
+              setTexts((arr) => arr.map((n) => (n.id === t.id ? { ...n, value: e.target.value } : n)));
+              schedulePersist();
+            }}
+            onBlur={() => {
+              if (!t.value.trim()) setTexts((arr) => arr.filter((n) => n.id !== t.id));
+              schedulePersist();
+            }}
+            placeholder="scrivi…"
+            className="absolute resize-none overflow-hidden bg-transparent text-[1.5rem] leading-tight outline-none placeholder:text-faint/40"
+            style={{
+              left: t.x,
+              top: t.y - 20,
+              color: t.color,
+              minWidth: 60,
+              width: Math.max(60, t.value.length * 14),
+              fontFamily: "var(--font-sans)",
+            }}
+          />
+        ))}
 
-        {/* barra strumenti — su mobile scorre invece di sovrapporsi */}
-        <div className="scroll-thin flex items-center justify-center gap-2 overflow-x-auto px-2">
-          <div className="glass flex w-max shrink-0 items-center gap-1 rounded-full p-1.5">
-            {([
-              ["pen", "M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"],
-              ["text", "M4 7V5h16v2 M9 5v14 M7 19h4"],
-              ["eraser", "M20 20H7L3 16a2 2 0 0 1 0-3l8-8a2 2 0 0 1 3 0l6 6a2 2 0 0 1 0 3l-6 6"],
-            ] as [Tool, string][]).map(([t, d]) => (
-              <button
-                key={t}
-                onClick={() => setTool(t)}
-                title={t}
-                className={`grid h-9 w-9 place-items-center rounded-full transition ${
-                  tool === t ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-dim"
-                }`}
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d={d} />
-                </svg>
-              </button>
-            ))}
-            <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                title="colore"
-                className={`h-6 w-6 rounded-full transition ${color === c ? "ring-2 ring-offset-2 ring-offset-[#100d0b] ring-paper/60" : ""}`}
-                style={{ background: c }}
-              />
-            ))}
-            <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
-            <input
-              type="range"
-              min={1}
-              max={12}
-              value={size}
-              onChange={(e) => setSize(+e.target.value)}
-              className="w-16 accent-[#c94b25]"
-              title="spessore"
-            />
-            <button
-              onClick={clearAll}
-              title="Pulisci"
-              className="ml-1 grid h-9 w-9 place-items-center rounded-full text-faint transition hover:text-signal-soft"
+        {/* placeholder: svanisce con MOTION-BLUR appena disegni, riappare a foglio vuoto */}
+        <AnimatePresence>
+          {!hasInk && texts.length === 0 && (
+            <motion.div
+              key="ph"
+              initial={{ opacity: 0, filter: "blur(8px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, filter: "blur(14px)", scale: 1.04 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="pointer-events-none absolute inset-0 grid place-items-center"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+              <p className="mono px-6 text-center text-[0.62rem] leading-relaxed text-faint">
+                DISEGNA L'IDEA · WHYCHAT LA LEGGE E LA CREA
+                <br />
+                <span className="text-faint/60">un sito, un'svg, un grafico, un gioco, una formula</span>
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+        </div>
+      </div>
+
+      {/* barra strumenti — visibile solo a foglio aperto; su mobile scorre */}
+      <div className={`scroll-thin flex items-center justify-center gap-2 overflow-x-auto px-2 ${collapsed ? "hidden" : ""}`}>
+        <div className="glass flex w-max shrink-0 items-center gap-1 rounded-full p-1.5">
+          {([
+            ["pen", "M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"],
+            ["text", "M4 7V5h16v2 M9 5v14 M7 19h4"],
+            ["eraser", "M20 20H7L3 16a2 2 0 0 1 0-3l8-8a2 2 0 0 1 3 0l6 6a2 2 0 0 1 0 3l-6 6"],
+          ] as [Tool, string][]).map(([t, d]) => (
+            <button
+              key={t}
+              onClick={() => setTool(t)}
+              title={t}
+              className={`grid h-9 w-9 place-items-center rounded-full transition ${
+                tool === t ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-dim"
+              }`}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d={d} />
               </svg>
             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* chat con visione: WhyChat guarda il foglio e lo rappresenta in parole */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <div ref={chatScrollRef} className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          {chat.length === 0 ? (
-            <div className="grid h-full place-items-center px-4 text-center">
-              <p className="mono text-[0.55rem] leading-relaxed text-faint">
-                DISEGNA QUELLO CHE VUOI, POI CHIEDI A WHYCHAT
-                <br />
-                LUI CAPISCE LO SKETCH E LO CREA DAVVERO (SITO · SVG · GIOCO · CALCOLO)
-              </p>
-            </div>
-          ) : (
-            <div className="mx-auto flex max-w-2xl flex-col gap-4 px-1 py-1">
-              {chat.map((m, i) => (
-                <ChatMessageView
-                  key={m.id}
-                  msg={{
-                    id: String(m.id),
-                    role: m.role,
-                    content: m.content,
-                    thoughts: m.thoughts,
-                    streaming: busy && i === chat.length - 1 && m.role === "assistant",
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
-          <button
-            onClick={() => askSheet("")}
-            disabled={busy}
-            title="WhyChat guarda il foglio"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--color-line2)] text-dim transition hover:text-paper disabled:opacity-40"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
-          <textarea
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={onChatKey}
-            rows={1}
-            placeholder="chiedi a WhyChat del tuo foglio…"
-            className="glass max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-2xl bg-transparent px-4 py-2.5 text-sm text-paper outline-none placeholder:text-faint"
+          ))}
+          <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              title="colore"
+              className={`h-6 w-6 rounded-full transition ${color === c ? "ring-2 ring-offset-2 ring-offset-[#100d0b] ring-paper/60" : ""}`}
+              style={{ background: c }}
+            />
+          ))}
+          <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
+          <input
+            type="range"
+            min={1}
+            max={12}
+            value={size}
+            onChange={(e) => setSize(+e.target.value)}
+            className="w-16 accent-[#c94b25]"
+            title="spessore"
           />
           <button
-            onClick={() => chatInput.trim() && askSheet(chatInput)}
-            disabled={busy || !chatInput.trim()}
-            title="Invia"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#c94b25] text-[#100d0b] transition hover:brightness-110 disabled:opacity-40"
+            onClick={clearAll}
+            title="Pulisci"
+            className="ml-1 grid h-9 w-9 place-items-center rounded-full text-faint transition hover:text-signal-soft"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
             </svg>
           </button>
         </div>
       </div>
+
+      {/* descrizione opzionale + CREA: il disegno (+parole) → creazione */}
+      <div className="flex items-center gap-2">
+        <input
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              create();
+            }
+          }}
+          disabled={busy}
+          placeholder="Descrivi il disegno (opzionale) — es. 'fanne un sito', 'risolvi'"
+          className="glass min-w-0 flex-1 rounded-full bg-transparent px-4 py-2.5 text-[0.88rem] text-paper placeholder:text-faint focus:outline-none"
+        />
+        <button
+          onClick={create}
+          disabled={busy || !hasInk}
+          className="mono flex shrink-0 items-center gap-1.5 rounded-full bg-[radial-gradient(125%_120%_at_50%_6%,#ffd2a4,#f0a36a_24%,#d4582c_56%,#8a2f17_100%)] px-4 py-2.5 text-[0.6rem] text-[#0a0908] transition disabled:opacity-35"
+          title="WhyChat guarda il disegno e lo crea"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          CREA
+        </button>
+      </div>
+
+      {/* risultato: WhyChat descrive a parole il disegno e costruisce */}
+      {(busy || result || err) && (
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.5)] p-4">
+          {busy && !result ? (
+            <div className="flex items-center gap-2 text-ember">
+              <WLoader size={20} />
+              <ShiningText text="Guardo il disegno e creo…" className="text-[0.92rem]" />
+            </div>
+          ) : err ? (
+            <p className="text-[0.85rem] text-signal-soft">{err}</p>
+          ) : (
+            parseSegments(result).map((seg, i) =>
+              seg.type === "artifact" ? (
+                <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} />
+              ) : (
+                <div
+                  key={i}
+                  className="wc-prose text-[0.92rem] leading-[1.7] text-dim"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.text) }}
+                />
+              ),
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 }

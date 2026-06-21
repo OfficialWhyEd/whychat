@@ -5,6 +5,8 @@ import SilkTrails from "./components/SilkTrails";
 import GroupChat, { type GroupSession } from "./components/GroupChat";
 import WhyEarth from "./components/WhyEarth";
 import WhyEntropy from "./components/WhyEntropy";
+import WhyMusic from "./components/WhyMusic";
+import WhyEcosystem from "./components/WhyEcosystem";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
 import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
 import BlankSheet, { type SheetSession } from "./components/BlankSheet";
@@ -15,7 +17,7 @@ import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
 import type { MapPin } from "./components/WhyEarthLive";
 const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
 // estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
@@ -45,6 +47,7 @@ function placeCandidates(text: string): string[] {
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
+import { speak, getTtsAuto, setTtsAuto, ttsSupported } from "./lib/tts";
 
 let counter = 0;
 const uid = () => `m${++counter}_${Date.now().toString(36)}`;
@@ -68,8 +71,14 @@ function Chat() {
   const [mode, setMode] = useState<Mode>("chat");
   const [model, setModel] = useState("whychat-5.5");
   const [webSearch, setWebSearch] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const planRef = useRef(planMode);
+  planRef.current = planMode;
   const [error, setError] = useState("");
   const [name, setNameState] = useState(getName());
+  const [autoTts, setAutoTtsState] = useState(getTtsAuto);
+  const autoTtsRef = useRef(autoTts);
+  autoTtsRef.current = autoTts;
   // stato del pannello: ricorda come l'hai lasciato (aperto/chiuso); default per
   // viewport solo la prima volta
   const [sidebar, setSidebar] = useState(() => {
@@ -100,6 +109,8 @@ function Chat() {
   const group = mode === "group";
   const earth = mode === "earth";
   const entropy = mode === "entropy";
+  const music = mode === "music";
+  const ecosystem = mode === "ecosystem";
 
   // WhyEarth: vista "Globo" (d3 a puntini, default) o "Mappa viva" (MapLibre).
   // Il sogno: quando la chat nomina un luogo, vola lì e pianta il pin.
@@ -274,9 +285,46 @@ function Chat() {
           ctrl.signal,
         );
         apply(true);
+        if (autoTtsRef.current) speak(answer);
       } else {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
+
+        // PLAN MODE: prima pianifica (timeline agente stile Claude Code), poi rispondi
+        const usePlan = planRef.current && ["chat", "canvas", "learn"].includes(useMode);
+        let planTimer: ReturnType<typeof setInterval> | null = null;
+        if (usePlan) {
+          try {
+            const steps = await planSteps(history, text);
+            if (steps.length) {
+              setChats((prev) =>
+                prev.map((c) =>
+                  c.id === id
+                    ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, plan: steps, planActive: 0 } : m)) }
+                    : c,
+                ),
+              );
+              let activeStep = 0;
+              planTimer = setInterval(() => {
+                activeStep += 1;
+                setChats((prev) =>
+                  prev.map((c) =>
+                    c.id === id
+                      ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, planActive: activeStep } : m)) }
+                      : c,
+                  ),
+                );
+                if (activeStep >= steps.length && planTimer) {
+                  clearInterval(planTimer);
+                  planTimer = null;
+                }
+              }, 650);
+            }
+          } catch {
+            /* il piano è opzionale: se fallisce, si risponde dritti */
+          }
+        }
+
         let acc = "";
         await streamChat(
           history,
@@ -289,7 +337,9 @@ function Chat() {
           model,
           webSearch,
         );
+        if (planTimer) clearInterval(planTimer);
         patch(acc, true);
+        if (autoTtsRef.current) speak(acc);
       }
       setChats((prev) => {
         saveChats(prev);
@@ -418,7 +468,7 @@ function Chat() {
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Particelle confinate all'area principale → si allineano all'hero e si
             riallineano da sole quando la sidebar si apre/chiude */}
-        <SoulParticles formText={empty && !sheet && !group && !earth && !entropy} modelName={modelName(model)} />
+        <SoulParticles formText={empty && !sheet && !group && !earth && !entropy && !music && !ecosystem} modelName={modelName(model)} />
         {/* Top bar */}
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
@@ -431,9 +481,37 @@ function Chat() {
             </svg>
           </button>
           <ModelSelector model={model} onModel={setModel} />
+          {ttsSupported() && (
+            <button
+              onClick={() => {
+                const next = !autoTts;
+                setAutoTtsState(next);
+                setTtsAuto(next);
+              }}
+              title={autoTts ? "Voce automatica attiva" : "Voce automatica disattivata"}
+              aria-pressed={autoTts}
+              className={`ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
+                autoTts
+                  ? "border-ember/50 text-ember"
+                  : "border-[var(--color-line2)] text-faint hover:text-paper"
+              }`}
+            >
+              {autoTts ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                  <path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                  <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          )}
           <button
             onClick={askName}
-            className="mono ml-auto max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+            className="mono max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>
@@ -511,6 +589,14 @@ function Chat() {
               </div>
             )}
           </main>
+        ) : music ? (
+          <main className="min-h-0 flex-1">
+            <WhyMusic onExit={() => setMode("chat")} />
+          </main>
+        ) : ecosystem ? (
+          <main className="min-h-0 flex-1">
+            <WhyEcosystem onExit={() => setMode("chat")} />
+          </main>
         ) : sheet ? (
           <main className="min-h-0 flex-1 px-4 pb-3">
             <div className="mx-auto h-full max-w-4xl">
@@ -551,7 +637,7 @@ function Chat() {
         )}
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
-        <footer className={`px-4 pb-4 pt-2 ${group || sheet ? "hidden" : ""}`}>
+        <footer className={`px-4 pb-4 pt-2 ${group || sheet || music || ecosystem ? "hidden" : ""}`}>
           <div className="relative mx-auto max-w-2xl">
             <AnimatePresence>
               {!atBottom && !empty && !sheet && !earth && !entropy && (
@@ -575,6 +661,8 @@ function Chat() {
               streaming={busy}
               search={webSearch}
               onToggleSearch={() => setWebSearch((s) => !s)}
+              plan={planMode}
+              onTogglePlan={() => setPlanMode((p) => !p)}
             />
             <p className="mx-auto mt-2.5 max-w-md text-center text-[0.6rem] leading-relaxed text-faint">
               <span className="text-dim/70">{modelName(model)}</span> · le conversazioni possono
@@ -603,6 +691,8 @@ const MODE_SHORT: Record<Mode, string> = {
   group: "gruppo",
   earth: "earth",
   entropy: "entropy",
+  music: "music",
+  ecosystem: "ecosystem",
 };
 const modeIcon = (m: Mode) => MODES.find((x) => x.id === m)?.icon ?? null;
 

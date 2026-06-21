@@ -222,6 +222,27 @@ export async function deepThink(
   }
 }
 
+// ── Plan (P5/P6): scompone un compito in passi mostrati come timeline agente ──
+export interface PlanStepData {
+  title: string;
+  tool: string;
+  detail?: string;
+}
+export async function planSteps(messages: ChatMessage[], task?: string): Promise<PlanStepData[]> {
+  const res = await postWithRetry("/api/plan", { messages, task, visitorId: visitorId(), name: getName() }, undefined);
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as { steps?: PlanStepData[] };
+  return d.steps ?? [];
+}
+
+// ── WhyMusic (P9): analisi profonda dalle metriche audio estratte nel browser ─
+export async function analyzeMusic(features: Record<string, unknown>, ask?: string): Promise<string> {
+  const res = await postWithRetry("/api/music", { features, ask, visitorId: visitorId(), name: getName() }, undefined);
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as { text?: string };
+  return d.text ?? "";
+}
+
 /**
  * Ragionamento VELOCE su Groq (modello reasoning, stile DeepSeek): pensiero +
  * risposta in streaming a ~0.3s. Stessa interfaccia di deepThink ma è Groq a

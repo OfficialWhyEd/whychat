@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { voice } from "../lib/tts";
 
 /**
  * SoulParticles — UN SOLO sistema. Le particelle fluttuano sul void come una
@@ -207,9 +208,14 @@ export default function SoulParticles({
     let raf = 0;
     const time0 = performance.now();
     const tick = (now: number) => {
-      ctx.fillStyle = "rgba(10,9,8,0.13)";
+      // Reattività TTS: mentre WhyChat parla, le particelle scorrono più veloci e
+      // si "metallizzano"; lo sfondo lascia scie più lunghe (più vivo, non invasivo).
+      const vlvl = voice.level; // 0..1
+      const speaking = voice.speaking;
+      ctx.fillStyle = `rgba(10,9,8,${(0.13 - vlvl * 0.05).toFixed(3)})`;
       ctx.fillRect(0, 0, W, H);
       const t = (now - time0) * 0.0001;
+      const flow = 1.5 * (1 + vlvl * 0.6); // velocità corrente, sale con la voce
 
       // macchina a fasi (solo se stiamo formando testo)
       if (formRef.current) {
@@ -254,8 +260,8 @@ export default function SoulParticles({
             p.y = Math.random() * H;
           }
           const a = noise(p.x * 0.0022, p.y * 0.0022 + t) * Math.PI * 4;
-          p.vx = Math.cos(a) * 1.5;
-          p.vy = Math.sin(a) * 1.5;
+          p.vx = Math.cos(a) * flow;
+          p.vy = Math.sin(a) * flow;
         }
         p.x += p.vx;
         p.y += p.vy;
@@ -265,14 +271,21 @@ export default function SoulParticles({
           if (p.y < 0) p.y = H;
           if (p.y > H) p.y = 0;
         }
-        const r = Math.round(201 + (240 - 201) * p.hue);
-        const g = Math.round(75 + (163 - 75) * p.hue);
-        const b = Math.round(37 + (106 - 37) * p.hue);
+        let r = Math.round(201 + (240 - 201) * p.hue);
+        let g = Math.round(75 + (163 - 75) * p.hue);
+        let b = Math.round(37 + (106 - 37) * p.hue);
+        // effetto metallico durante il parlato: vira verso un argento brunito
+        if (speaking && vlvl > 0.01) {
+          const m = Math.min(0.7, vlvl * 0.7);
+          r = Math.round(r + (214 - r) * m);
+          g = Math.round(g + (218 - g) * m);
+          b = Math.round(b + (224 - b) * m);
+        }
         // le particelle che formano la parola brillano di più (mix-blend screen
         // somma il colore dove sono dense → la scritta si accende viva)
-        const op = p.forming ? 1 : Math.sin((p.life / p.maxLife) * Math.PI) * 0.4;
-        ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-        const s = p.forming ? p.size * 0.7 + 1.1 : p.size; // testo nitido e costante
+        const op = (p.forming ? 1 : Math.sin((p.life / p.maxLife) * Math.PI) * 0.4) * (1 + vlvl * 0.3);
+        ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, op)})`;
+        const s = (p.forming ? p.size * 0.7 + 1.1 : p.size) * (1 + vlvl * 0.25); // shimmer sulla voce
         ctx.fillRect(p.x, p.y, s, s);
       }
       raf = requestAnimationFrame(tick);
