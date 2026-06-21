@@ -6,7 +6,7 @@ import { Typewriter } from "./Typewriter";
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem";
 
 interface ModeDef {
   id: Mode;
@@ -54,6 +54,25 @@ export const MODES: ModeDef[] = [
     desc: "Ordine geometrico che si dissolve in caos",
     tag: "beta",
     icon: I("M12 3 21 19 3 19Z", <circle cx="12" cy="13.5" r="1.5" />),
+  },
+  {
+    id: "music",
+    label: "WhyMusic",
+    desc: "Analizza una traccia nel dettaglio",
+    tag: "beta",
+    icon: I("M9 18V5l12-2v13", (
+      <>
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="16" r="3" />
+      </>
+    )),
+  },
+  {
+    id: "ecosystem",
+    label: "WhyEcosystem",
+    desc: "Simulazioni di natura, dal vivo",
+    tag: "beta",
+    icon: I("M12 2a9 9 0 0 0-9 9c0 5 4 9 9 11 5-2 9-6 9-11a9 9 0 0 0-9-9zM12 7v8M8 11h8", undefined),
   },
 ];
 
