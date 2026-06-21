@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { seeSheet, streamChat, type ChatMessage as ApiMsg } from "../lib/api";
+import { seeSheet, streamChat, deepThink, type ChatMessage as ApiMsg } from "../lib/api";
 import ChatMessageView from "./ChatMessage";
 
 /**
@@ -28,6 +28,7 @@ interface ChatLine {
   id: number;
   role: "user" | "assistant";
   content: string;
+  thoughts?: string; // ragionamento (quando Groq passa la palla a Gemini)
 }
 
 // Sessione serializzabile del foglio: disegno (dataURL) + testi + chat. Vive tra le conversazioni.
@@ -260,8 +261,26 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
         const img = snapshot();
         if (img) await seeSheet(img, prompt, history, onTok);
       } else {
-        // Groq diretto in modalità canvas → crea da testo (artifact) in <1s
-        await streamChat([...history, { role: "user", content: prompt }], onTok, undefined, "canvas", "whychat-5.5", false);
+        // Groq diretto (veloce). Ma è GROQ a decidere: se è semplice crea/risponde
+        // subito; se è davvero complesso scrive [[RAGIONA]] e passiamo a Gemini.
+        const groqPrompt =
+          prompt +
+          "\n\n(Sistema: se questa richiesta è semplice, creala/rispondi subito. Se invece è DAVVERO complessa e richiede ragionamento profondo, rispondi SOLO ed esattamente con [[RAGIONA]] e nient'altro.)";
+        await streamChat([...history, { role: "user", content: groqPrompt }], onTok, undefined, "canvas", "whychat-5.5", false);
+        if (acc.trim().toUpperCase().includes("[[RAGIONA")) {
+          // escalation decisa dal modello → ragionamento Google (Gemini)
+          acc = "";
+          setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, content: "", thoughts: "" } : m)));
+          let thoughts = "";
+          await deepThink(
+            [...history, { role: "user", content: prompt }],
+            (d) => {
+              thoughts += d;
+              setChat((c) => c.map((m) => (m.id === aiLine.id ? { ...m, thoughts } : m)));
+            },
+            onTok,
+          );
+        }
       }
     } catch (e) {
       const msg = `⚠ ${(e as Error).message}`;
@@ -468,6 +487,7 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
                     id: String(m.id),
                     role: m.role,
                     content: m.content,
+                    thoughts: m.thoughts,
                     streaming: busy && i === chat.length - 1 && m.role === "assistant",
                   }}
                 />
