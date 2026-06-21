@@ -153,9 +153,29 @@ const DEFAULT_GROQ_MODELS = [
   "qwen/qwen3-32b",
 ];
 
-/** Le chiavi Groq disponibili, in ordine (la 2ª raddoppia la quota). */
+/**
+ * Raccoglie TUTTE le chiavi con un dato prefisso da env (GROQ_API_KEY,
+ * GROQ_API_KEY_2, _3, _4, …). Sistema solido: basta aggiungere un secret
+ * GROQ_API_KEY_N (o GEMINI_API_KEY_N) e entra da solo nella rotazione, senza
+ * toccare il codice. Più chiavi = più quota = più energia.
+ */
+function collectKeys(env: Env, prefix: string): string[] {
+  const e = env as unknown as Record<string, unknown>;
+  return Object.keys(e)
+    .filter((k) => k === prefix || k.startsWith(prefix + "_"))
+    .sort() // ordine stabile: _ , _2, _3 …
+    .map((k) => e[k])
+    .filter((v): v is string => typeof v === "string" && v.length > 10);
+}
+
+/** Tutte le chiavi Groq disponibili (più ce ne sono, più quota). */
 function groqKeys(env: Env): string[] {
-  return [env.GROQ_API_KEY, env.GROQ_API_KEY_2].filter(Boolean) as string[];
+  return collectKeys(env, "GROQ_API_KEY");
+}
+
+/** Tutte le chiavi Gemini disponibili. */
+function geminiKeys(env: Env): string[] {
+  return collectKeys(env, "GEMINI_API_KEY");
 }
 
 /** La catena di modelli Groq da provare: 'selected' per primo, poi gli altri. */
@@ -519,7 +539,7 @@ async function streamGeminiChat(
     generationConfig: { temperature: 0.85, maxOutputTokens: 2048 },
   });
 
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   let upstream: Response | null = null;
   let last = "";
   outer: for (const model of geminiModels(env)) {
@@ -691,7 +711,7 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
 
   // 2) GEMINI come rete (quando Groq è esaurito/sotto sforzo). Più lento ma non
   //    si perde nulla: tutta l'energia disponibile entra in gioco.
-  const geminiKeysArr = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const geminiKeysArr = geminiKeys(env);
   const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
   for (const model of rotateArr(REASON_GEMINI, rot)) {
     const gen: Record<string, unknown> = { temperature: 0.7, maxOutputTokens: 3072 };
@@ -772,7 +792,7 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
     generationConfig: { temperature: 0.8, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
   });
 
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   let upstream: Response | null = null;
   let last = "";
   outer: for (const model of geminiModels(env)) {
@@ -847,7 +867,7 @@ async function geminiGenerate(
     generationConfig: Record<string, unknown>;
   },
 ): Promise<GeminiResp> {
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   if (!keys.length) throw new Error("nessuna chiave Gemini configurata");
   let last = "";
   for (const model of geminiModels(env)) {
@@ -913,7 +933,7 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
   };
 
   // Apre lo STREAM Gemini provando modelli × chiavi finché uno risponde.
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   let upstream: Response | null = null;
   let last = "";
   outer: for (const model of geminiModels(env)) {
