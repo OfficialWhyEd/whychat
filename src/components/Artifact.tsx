@@ -30,7 +30,7 @@ export default function Artifact({
 
   const frame = (full: boolean) => (
     <iframe
-      key={reloadKey}
+      key={`${reloadKey}-${html.length}`}
       title={title}
       srcDoc={html}
       sandbox="allow-scripts allow-pointer-lock allow-popups allow-modals"
