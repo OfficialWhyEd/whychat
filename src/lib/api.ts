@@ -103,6 +103,68 @@ export async function streamChat(
   }
 }
 
+/**
+ * OnlyType: WhyChat GUARDA il foglio (immagine) e risponde in parole, in
+ * streaming. `image` è un dataURL (PNG/JPEG) del canvas; `prompt` è cosa chiedi.
+ */
+export async function seeSheet(
+  image: string,
+  prompt: string,
+  history: ChatMessage[],
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await postWithRetry(
+    "/api/see",
+    { image, prompt, history, visitorId: visitorId(), name: getName() },
+    signal,
+  );
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const data = t.slice(5).trim();
+      if (data === "[DONE]") return;
+      try {
+        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string") onToken(delta);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
+}
+
+/** Geocoding keyless (open-meteo): nome luogo → coordinate, per piantare il pin su WhyEarth. */
+export async function geocodePlace(name: string): Promise<{ lng: number; lat: number; name: string } | null> {
+  const q = name.trim();
+  if (!q) return null;
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=it&format=json`,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as {
+      results?: { latitude: number; longitude: number; name: string; country?: string }[];
+    };
+    const r = d.results?.[0];
+    if (!r) return null;
+    return { lng: r.longitude, lat: r.latitude, name: r.country ? `${r.name}, ${r.country}` : r.name };
+  } catch {
+    return null;
+  }
+}
+
 export interface Dream {
   date: string;
   ts: string;
@@ -160,29 +222,6 @@ export async function deepThink(
   }
 }
 
-// ── Geocoding keyless (open-meteo) per i pin di WhyEarth ──────────────────────
-export interface GeoPlace {
-  name: string;
-  country?: string;
-  lat: number;
-  lng: number;
-}
-export async function geocodePlace(query: string): Promise<GeoPlace | null> {
-  const q = query.trim();
-  if (!q) return null;
-  try {
-    const res = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=it&format=json`,
-    );
-    if (!res.ok) return null;
-    const d = (await res.json()) as { results?: { name: string; country?: string; latitude: number; longitude: number }[] };
-    const r = d.results?.[0];
-    return r ? { name: r.name, country: r.country, lat: r.latitude, lng: r.longitude } : null;
-  } catch {
-    return null;
-  }
-}
-
 // ── Plan (P5/P6): scompone un compito in passi mostrati come timeline agente ──
 export interface PlanStepData {
   title: string;
@@ -196,20 +235,51 @@ export async function planSteps(messages: ChatMessage[], task?: string): Promise
   return d.steps ?? [];
 }
 
-// ── OnlyType vision (P8): il disegno È il prompt → WhyChat lo crea ────────────
-export async function seeDrawing(image: string, prompt?: string, signal?: AbortSignal): Promise<string> {
-  const res = await postWithRetry("/api/see", { image, prompt, visitorId: visitorId(), name: getName() }, signal);
-  if (!res.ok) throw new Error(await readError(res));
-  const d = (await res.json()) as { text?: string };
-  return d.text ?? "";
-}
-
 // ── WhyMusic (P9): analisi profonda dalle metriche audio estratte nel browser ─
 export async function analyzeMusic(features: Record<string, unknown>, ask?: string): Promise<string> {
   const res = await postWithRetry("/api/music", { features, ask, visitorId: visitorId(), name: getName() }, undefined);
   if (!res.ok) throw new Error(await readError(res));
   const d = (await res.json()) as { text?: string };
   return d.text ?? "";
+}
+
+/**
+ * Ragionamento VELOCE su Groq (modello reasoning, stile DeepSeek): pensiero +
+ * risposta in streaming a ~0.3s. Stessa interfaccia di deepThink ma è Groq a
+ * orchestrare e a produrre l'uscita. `mode` passa l'hint di modalità (es. canvas).
+ */
+export async function reasonGroq(
+  messages: ChatMessage[],
+  onThought: (delta: string) => void,
+  onAnswer: (delta: string) => void,
+  signal?: AbortSignal,
+  mode = "chat",
+): Promise<void> {
+  const res = await postWithRetry("/api/reason", { messages, mode, visitorId: visitorId(), name: getName() }, signal);
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const d = t.slice(5).trim();
+      if (!d || d === "[DONE]") continue;
+      try {
+        const ev = JSON.parse(d) as { t?: string; d?: string };
+        if (ev.t === "thought" && ev.d) onThought(ev.d);
+        else if (ev.t === "answer" && ev.d) onAnswer(ev.d);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
 }
 
 // ── Group Prediction (beta): simulazione a più agenti stile MiroFish ──────────

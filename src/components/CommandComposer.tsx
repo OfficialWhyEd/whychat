@@ -165,7 +165,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               {/* fondo solido: il menu non lascia trasparire la chat dietro */}
               <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[#141009]/92" />
               <div className="relative mono px-4 pb-1 pt-3 text-[0.5rem] text-faint">MODALITÀ</div>
-              <ul className="relative px-1.5 pb-2">
+              <ul className="scroll-thin relative max-h-[min(58vh,420px)] overflow-y-auto px-1.5 pb-2">
                 {MODES.map((m) => {
                   const active = m.id === mode;
                   return (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { seeDrawing } from "../lib/api";
+import { seeSheet } from "../lib/api";
 import { renderMarkdown } from "../lib/markdown";
 import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
@@ -232,9 +232,18 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     setBusy(true);
     setResult("");
     setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio al risultato
+    let acc = "";
     try {
-      const text = await seeDrawing(img, prompt.trim() || undefined);
-      setResult(text || "Non sono riuscito a leggere il disegno. Riprova con un tratto più netto.");
+      await seeSheet(
+        img,
+        prompt.trim() || "Guarda il disegno e crea ciò che rappresenta.",
+        [],
+        (d) => {
+          acc += d;
+          setResult(acc);
+        },
+      );
+      if (!acc.trim()) setResult("Non sono riuscito a leggere il disegno. Riprova con un tratto più netto.");
     } catch (e) {
       setErr(`⚠ ${(e as Error).message}`);
     } finally {

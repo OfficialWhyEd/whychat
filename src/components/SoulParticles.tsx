@@ -125,14 +125,16 @@ export default function SoulParticles({
 
     // Il canvas È già l'area principale → basta centrare a metà; si riallinea da solo
     // quando la sidebar cambia (ResizeObserver sotto).
-    const wordCenter = () => ({ cx: W / 2, cy: Math.max(150, H * 0.28) });
+    // su mobile (stretto) il nome a particelle sta più in alto e più compatto,
+    // così non si sovrappone alla prosa/aperture sotto
+    const wordCenter = () => ({ cx: W / 2, cy: W < 640 ? Math.max(92, H * 0.17) : Math.max(150, H * 0.28) });
 
     // Campiona i pixel di una parola → lista di target (coord viewport).
     const sampleWord = (word: string): { x: number; y: number }[] => {
       const { cx, cy } = wordCenter();
       const off = document.createElement("canvas");
       const ow = Math.min(900, W - 40);
-      const oh = 220;
+      const oh = W < 640 ? 130 : 220;
       off.width = ow;
       off.height = oh;
       const o = off.getContext("2d")!;

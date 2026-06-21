@@ -12,6 +12,7 @@
  */
 
 import { SOUL, WHYCHAT_DREAM } from "./persona";
+import { BEHAVIOR } from "./behavior";
 
 export interface Env {
   GROQ_API_KEY: string;
@@ -31,19 +32,14 @@ export interface Env {
 const MODE_HINTS: Record<string, string> = {
   canvas: `\n\n[MODALITÀ CANVAS] Quando ha senso, rispondi COSTRUENDO: emetti uno o più artifact \`\`\`whyart (HTML autosufficiente) — schizzi, diagrammi, mini-interfacce, visualizzazioni, mini-giochi. Prima una riga di testo, poi il canvas. Fai vedere, non solo dire.`,
   learn: `\n\n[MODALITÀ APPRENDIMENTO] Insegna come faresti a qualcuno che vuole capire davvero: parti dall'intuizione, poi la struttura, poi un esempio concreto. Un passo alla volta, niente muri di testo. Fai una domanda di verifica alla fine. Tono diretto e caldo, mai accademico.`,
-  earth: `\n\n[MODALITÀ WHYEARTH] Sei connesso al planetario di WhyChat: il mappamondo vivo. Rispondi a domande geografiche con precisione (luoghi, paesi, capitali, distanze, fusi orari, geografia fisica e umana, attualità di un posto). Quando nomini uno o più luoghi specifici su cui ha senso volare e mettere un pin, emetti ciascuno su una riga a sé con il marcatore: [[LUOGO: Città, Paese]]. Tieni il testo conversazionale, vivo e breve.`,
+  earth: `\n\n[MODALITÀ WHYEARTH] Sei davanti al mappamondo, col mondo intero sotto gli occhi. Parla di geografia, paesi, culture, attualità globale, viaggi, e fenomeni del pianeta (terremoti, voli, clima). Concreto, curioso, connesso al presente reale.
+Quando la risposta riguarda un luogo specifico, alla FINE aggiungi su una riga a parte ESATTAMENTE questo marcatore (un solo luogo, il principale, per esteso):
+[[LUOGO: Città, Paese]]
+Serve a far volare il globo su quel punto e piantare il pin. Mettilo solo se c'è un luogo chiaro; l'utente non lo legge come testo.`,
+  entropy: `\n\n[MODALITÀ WHYENTROPY] Spazio aperto a tutto e a tutti: spiritualità, psicologia, neuroscienze, il divino, religione, economia, filosofia, il senso delle cose. Ragiona in profondità e intreccia i domini, senza dogmi — esplori, non predichi. Accogli ogni domanda, anche la più grande, con lucidità. Tono contemplativo ma concreto, mai vago né New Age da supermercato.`,
+  deep: `\n\n[MODALITÀ PENSIERO PROFONDO] Ragiona davvero prima di rispondere: scomponi il problema, considera le angolazioni, poi tira una conclusione netta e motivata. Profondità vera, niente fronzoli.`,
   chat: "",
 };
-
-/** Contesto temporale: WhyChat sa sempre che giorno e ora è (Europe/Rome). */
-function nowContext(): string {
-  try {
-    const fmt = new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Rome" });
-    return `\n\n[ADESSO È: ${fmt.format(new Date())} (Europe/Rome). Conosci la data e l'ora correnti: usale quando servono, con naturalezza.]`;
-  } catch {
-    return "";
-  }
-}
 
 // ── Modelli selezionabili (nomi-anima → modelli Groq reali, entrambi in streaming) ──
 const MODEL_MAP: Record<string, string> = {
@@ -157,9 +153,29 @@ const DEFAULT_GROQ_MODELS = [
   "qwen/qwen3-32b",
 ];
 
-/** Le chiavi Groq disponibili, in ordine (la 2ª raddoppia la quota). */
+/**
+ * Raccoglie TUTTE le chiavi con un dato prefisso da env (GROQ_API_KEY,
+ * GROQ_API_KEY_2, _3, _4, …). Sistema solido: basta aggiungere un secret
+ * GROQ_API_KEY_N (o GEMINI_API_KEY_N) e entra da solo nella rotazione, senza
+ * toccare il codice. Più chiavi = più quota = più energia.
+ */
+function collectKeys(env: Env, prefix: string): string[] {
+  const e = env as unknown as Record<string, unknown>;
+  return Object.keys(e)
+    .filter((k) => k === prefix || k.startsWith(prefix + "_"))
+    .sort() // ordine stabile: _ , _2, _3 …
+    .map((k) => e[k])
+    .filter((v): v is string => typeof v === "string" && v.length > 10);
+}
+
+/** Tutte le chiavi Groq disponibili (più ce ne sono, più quota). */
 function groqKeys(env: Env): string[] {
-  return [env.GROQ_API_KEY, env.GROQ_API_KEY_2].filter(Boolean) as string[];
+  return collectKeys(env, "GROQ_API_KEY");
+}
+
+/** Tutte le chiavi Gemini disponibili. */
+function geminiKeys(env: Env): string[] {
+  return collectKeys(env, "GEMINI_API_KEY");
 }
 
 /** La catena di modelli Groq da provare: 'selected' per primo, poi gli altri. */
@@ -364,6 +380,28 @@ async function liveSearch(query: string): Promise<string> {
   return out.join("\n").slice(0, 1600);
 }
 
+// Contesto temporale: WhyChat sa SEMPRE che ora/giorno è davvero (Europe/Rome).
+// Iniettato a ogni richiesta → ancorato al presente reale, non al training.
+function nowContext(): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("it-IT", {
+      timeZone: "Europe/Rome",
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+    return `\n\n[ADESSO È: ${fmt.format(new Date())} (ora italiana, Europe/Rome). Sei ancorato al presente reale: se ti chiedono che ora è, che giorno è o la data, rispondi da qui con certezza — è l'ora vera, non una stima.]`;
+  } catch {
+    return `\n\n[ADESSO È (UTC): ${new Date().toISOString().slice(0, 16).replace("T", " ")}. Sei ancorato al presente reale.]`;
+  }
+}
+
+// Euristica: la domanda chiede info fresche / dal mondo? → cerca da solo,
+// anche senza che l'utente attivi il toggle (tool use intelligente).
+function needsLiveInfo(text: string): boolean {
+  const t = text.toLowerCase();
+  return /(\boggi\b|\badesso\b|attual|ultim|recent|stamattin|staser|\bieri\b|\bdomani\b|\bnews\b|notizi|che ora|che giorno|in tempo reale|\blive\b|meteo|prevision|\bprezzo\b|quotazion|\bborsa\b|bitcoin|\bcambio\b|chi è |chi e' |presidente|primo ministro|vincit|risultat|classific|\buscit|appena|\b202[4-9]\b|latest|current|today|right now)/.test(t);
+}
+
 async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
   if (req.headers.get("Access-Control-Allow-Origin") === "null") {
@@ -386,11 +424,12 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-  // ricerca web (toggle utente): inietta risultati ONLINE reali nel contesto
-  const webCtx = body.search ? await liveSearch(lastUser) : "";
+  // ricerca web: toggle utente OPPURE auto se la domanda chiede info dal mondo
+  const webCtx = (body.search || needsLiveInfo(lastUser)) ? await liveSearch(lastUser) : "";
 
   const systemText =
     SOUL +
+    BEHAVIOR +
     nowContext() +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
     modeHint +
@@ -500,7 +539,7 @@ async function streamGeminiChat(
     generationConfig: { temperature: 0.85, maxOutputTokens: 2048 },
   });
 
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   let upstream: Response | null = null;
   let last = "";
   outer: for (const model of geminiModels(env)) {
@@ -572,6 +611,249 @@ function geminiModels(env: Env): string[] {
   return list.length ? list : DEFAULT_GEMINI_MODELS;
 }
 
+// ── /api/reason — ragionamento con FALLBACK COMPLETO + ROTAZIONE.
+// Tutti i modelli reasoning disponibili, dal più potente al meno, che ruotano a
+// ogni richiesta per spalmare il consumo di token (non sforzare un modello/chiave
+// solo). Groq reasoning prima (veloce, ~0.3s, stile DeepSeek); Gemini integrato
+// come rete quando Groq è sotto sforzo. L'uscita esce come SSE {t:"thought"|"answer", d}.
+const REASON_GROQ = ["openai/gpt-oss-120b", "qwen/qwen3-32b", "openai/gpt-oss-20b"];
+const REASON_GEMINI = ["gemini-2.5-flash", "gemini-2.0-flash"];
+let reasonRot = 0; // contatore round-robin: ruota lo start per bilanciare il carico
+
+function rotateArr<T>(a: T[], n: number): T[] {
+  if (a.length < 2) return a;
+  const i = ((n % a.length) + a.length) % a.length;
+  return [...a.slice(i), ...a.slice(0, i)];
+}
+
+async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { messages?: unknown; visitorId?: unknown; name?: unknown; mode?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+  const messages = sanitizeMessages(body.messages);
+  if (!messages) return json({ error: "messaggi non validi" }, 400, cors);
+  const name = String(body.name ?? "").slice(0, 80);
+  const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
+  const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
+  const systemText = SOUL + BEHAVIOR + nowContext() + (name ? `\n\n[Parli con: ${name}]` : "") + modeHint;
+  const rot = reasonRot++;
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // costruisce la Response SSE a partire dallo stream upstream, con un parser
+  // (Groq: delta.reasoning/content — Gemini: parts.thought/text)
+  const makeResponse = (
+    upstream: Response,
+    parse: (json: string, emit: (t: "thought" | "answer", d: string) => void) => void,
+  ) => {
+    let buf = "";
+    let answer = "";
+    const transform = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buf += decoder.decode(chunk, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith("data:")) continue;
+          const d = t.slice(5).trim();
+          if (!d || d === "[DONE]") continue;
+          parse(d, (kind, val) => {
+            if (kind === "answer") answer += val;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ t: kind, d: val })}\n\n`));
+          });
+        }
+      },
+      flush(controller) {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        ctx.waitUntil(logTurn(env, req, visitorId, name, lastUser, answer));
+      },
+    });
+    return new Response(upstream.body!.pipeThrough(transform), {
+      headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  };
+
+  // 1) GROQ reasoning (veloce). Modelli + chiavi ruotati → spalma i token.
+  const groqBody = (model: string) =>
+    JSON.stringify({ model, stream: true, temperature: 0.7, max_tokens: 3072, messages: [{ role: "system", content: systemText }, ...messages] });
+  for (const model of rotateArr(REASON_GROQ, rot)) {
+    for (const key of rotateArr(groqKeys(env), rot)) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: groqBody(model),
+        });
+        if (res.ok && res.body) {
+          return makeResponse(res, (d, emit) => {
+            try {
+              const delta = (JSON.parse(d) as { choices?: { delta?: { reasoning?: string; content?: string } }[] }).choices?.[0]?.delta;
+              if (delta?.reasoning) emit("thought", delta.reasoning);
+              if (delta?.content) emit("answer", delta.content);
+            } catch {
+              /* parziale */
+            }
+          });
+        }
+        if (res.status === 400 || res.status === 404) break;
+      } catch {
+        /* prossima combinazione */
+      }
+    }
+  }
+
+  // 2) GEMINI come rete (quando Groq è esaurito/sotto sforzo). Più lento ma non
+  //    si perde nulla: tutta l'energia disponibile entra in gioco.
+  const geminiKeysArr = geminiKeys(env);
+  const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+  for (const model of rotateArr(REASON_GEMINI, rot)) {
+    const gen: Record<string, unknown> = { temperature: 0.7, maxOutputTokens: 3072 };
+    if (model.startsWith("gemini-2.5")) gen.thinkingConfig = { includeThoughts: true, thinkingBudget: -1 };
+    const reqBody = JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents, generationConfig: gen });
+    for (const key of rotateArr(geminiKeysArr, rot)) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          return makeResponse(res, (d, emit) => {
+            try {
+              const j = JSON.parse(d) as GeminiResp;
+              for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+                if (!p.text) continue;
+                emit(p.thought ? "thought" : "answer", p.text);
+              }
+            } catch {
+              /* parziale */
+            }
+          });
+        }
+        if (res.status === 400 || res.status === 404) break;
+      } catch {
+        /* prossima combinazione */
+      }
+    }
+  }
+
+  return json({ error: "ragionamento non disponibile" }, 502, cors);
+}
+
+// ── /api/see — OnlyType: WhyChat GUARDA il foglio (Gemini multimodale) e lo
+// rappresenta/ragiona in PAROLE. È il tool dedicato alla modalità OnlyType:
+// stesso pattern SSE delle altre risposte Gemini, ma con l'immagine nel contesto.
+async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const cors = corsHeaders(req, env);
+  let body: { image?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON non valido" }, 400, cors);
+  }
+
+  const dataUrl = String(body.image ?? "");
+  const m = /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(dataUrl);
+  if (!m) return json({ error: "immagine non valida" }, 400, cors);
+  const mimeType = m[1];
+  const data = m[2].slice(0, 5_000_000); // guard payload
+  const prompt = String(body.prompt ?? "").slice(0, MAX_MESSAGE_CHARS) || "Guarda il mio foglio e dimmi cosa vedi.";
+  const name = String(body.name ?? "").slice(0, 80);
+  const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
+
+  const hist = sanitizeMessages(body.history) ?? [];
+  const contents: unknown[] = hist.map((mm) => ({
+    role: mm.role === "assistant" ? "model" : "user",
+    parts: [{ text: mm.content }],
+  }));
+  contents.push({ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType, data } }] });
+
+  const systemText =
+    SOUL + BEHAVIOR + nowContext() +
+    (name ? `\n\n[Parli con: ${name}]` : "") +
+    `\n\n[MODALITÀ ONLYTYPE — DISEGNO→CREAZIONE] Il foglio è un PROMPT VISIVO: la persona schizza/scrive un'idea e tu la REALIZZI davvero, non la descrivi. Capisci cosa ha disegnato (un layout di sito, un'interfaccia, un personaggio, un diagramma, un'icona, un'equazione, un calcolo, l'idea di un gioco…) e con un ragionamento serio PRODUCI il risultato finito.
+- Se è UI / sito / gioco / visualizzazione / diagramma → emetti un artifact \`\`\`whyart (HTML+CSS+JS autosufficiente, estetica WhyEd dark) che lo costruisce DAVVERO e funzionante.
+- Se è un disegno / forma / logo → un artifact \`\`\`whyart con un SVG pulito che lo ricrea.
+- Se è un'equazione, un calcolo o una formula → risolvilo passo-passo e dai il risultato netto.
+- Una riga per dire cosa hai capito dallo sketch, POI crea. Se il foglio è troppo vago, fa' UNA domanda secca ma proponi comunque una prima versione. Mai limitarti a descrivere: qui si COSTRUISCE.
+- VELOCITÀ: per uno sketch semplice rispondi SUBITO, senza preamboli né ragionamenti lunghi. Ragiona di più solo se il disegno è davvero complesso. L'utente vuole risposte rapide.`;
+
+  const reqBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents,
+    // thinkingBudget 0 = niente ragionamento esteso → OnlyType è VELOCE sulle
+    // cose semplici (Gemini ragiona comunque inline per i build complessi).
+    generationConfig: { temperature: 0.8, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
+  });
+
+  const keys = geminiKeys(env);
+  let upstream: Response | null = null;
+  let last = "";
+  outer: for (const model of geminiModels(env)) {
+    for (const key of keys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody },
+        );
+        if (res.ok && res.body) {
+          upstream = res;
+          break outer;
+        }
+        last = `${model}:${res.status}`;
+        if (res.status === 400 || res.status === 404) break;
+      } catch (e) {
+        last = `${model}:${(e as Error).message}`;
+      }
+    }
+  }
+  if (!upstream || !upstream.body) {
+    return json({ error: "Il servizio è momentaneamente occupato. Riprova tra poco.", detail: last }, 502, cors);
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buf = "";
+  let acc = "";
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buf += decoder.decode(chunk, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim();
+        if (!d || d === "[DONE]") continue;
+        try {
+          const j = JSON.parse(d) as GeminiResp;
+          for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+            if (!p.text || p.thought) continue;
+            acc += p.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: p.text } }] })}\n\n`));
+          }
+        } catch {
+          /* frammento parziale, ignora */
+        }
+      }
+    },
+    flush(controller) {
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      ctx.waitUntil(logTurn(env, req, visitorId, name, "[OnlyType: guarda il foglio]", acc));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(transform), {
+    headers: { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+}
+
 /**
  * Genera con Gemini provando in ordine ogni modello (dal più recente) su ogni
  * chiave API finché una combinazione risponde. Così un singolo modello a quota,
@@ -585,7 +867,7 @@ async function geminiGenerate(
     generationConfig: Record<string, unknown>;
   },
 ): Promise<GeminiResp> {
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   if (!keys.length) throw new Error("nessuna chiave Gemini configurata");
   let last = "";
   for (const model of geminiModels(env)) {
@@ -632,8 +914,15 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
     parts: [{ text: m.content }],
   }));
 
+  // pensiero profondo connesso al mondo: ora reale + ricerca se serve
+  const webCtx = needsLiveInfo(lastUser) ? await liveSearch(lastUser) : "";
+  const thinkSystem =
+    SOUL + BEHAVIOR + nowContext() +
+    (name ? `\n\n[Parli con: ${name}]` : "") +
+    (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— ragiona su questi fatti reali, citali con naturalezza; non inventare.]` : "");
+
   const payloadBase = {
-    systemInstruction: { parts: [{ text: SOUL + (name ? `\n\n[Parli con: ${name}]` : "") }] },
+    systemInstruction: { parts: [{ text: thinkSystem }] },
     contents,
     generationConfig: {
       temperature: 0.9,
@@ -644,7 +933,7 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
   };
 
   // Apre lo STREAM Gemini provando modelli × chiavi finché uno risponde.
-  const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter(Boolean) as string[];
+  const keys = geminiKeys(env);
   let upstream: Response | null = null;
   let last = "";
   outer: for (const model of geminiModels(env)) {
@@ -895,20 +1184,36 @@ Concreto, niente disclaimer inutili.`;
 async function handleFlights(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
   try {
-    // adsb.lol: aviazione live keyless. /v2/mil = aerei militari globali (set reale).
-    const upstream = await fetch("https://api.adsb.lol/v2/mil", {
+    // OpenSky: stati aerei reali e GLOBALI, keyless. adsb.lol faceva 429 sull'IP
+    // datacenter del Worker (voli sbagliati). Cache edge 25s → niente rate-limit.
+    const init = {
       headers: { "User-Agent": "WhyChat/1.0 (whyed)", Accept: "application/json" },
-    });
-    if (!upstream.ok) throw new Error(`adsb ${upstream.status}`);
-    const data = (await upstream.json()) as { ac?: { lat?: number; lon?: number }[] };
+      cf: { cacheTtl: 25, cacheEverything: true },
+    };
+    const upstream = await fetch("https://opensky-network.org/api/states/all", init as RequestInit);
+    if (!upstream.ok) throw new Error(`opensky ${upstream.status}`);
+    const data = (await upstream.json()) as { states?: (string | number | boolean | null)[][] };
+    // formato legacy [lon,lat] per il globo d3 + 'live' (rotta/velocità) per gli aerei animati
     const flights: [number, number][] = [];
-    for (const a of data.ac ?? []) {
-      if (typeof a.lon === "number" && typeof a.lat === "number") {
-        flights.push([Math.round(a.lon * 100) / 100, Math.round(a.lat * 100) / 100]);
-        if (flights.length >= 4000) break;
+    const live: { lon: number; lat: number; dir: number; spd: number; call: string }[] = [];
+    for (const s of data.states ?? []) {
+      const lon = s[5];
+      const lat = s[6];
+      const onGround = s[8] === true;
+      if (typeof lon !== "number" || typeof lat !== "number" || onGround) continue;
+      flights.push([Math.round(lon * 100) / 100, Math.round(lat * 100) / 100]);
+      if (live.length < 1500) {
+        live.push({
+          lon,
+          lat,
+          dir: typeof s[10] === "number" ? s[10] : 0, // true_track (prua)
+          spd: typeof s[9] === "number" ? s[9] : 0, // velocity m/s
+          call: String(s[1] ?? "").trim(),
+        });
       }
+      if (flights.length >= 4000) break;
     }
-    return json({ flights }, 200, { ...cors, "Cache-Control": "public, max-age=20" });
+    return json({ flights, live }, 200, { ...cors, "Cache-Control": "public, max-age=20" });
   } catch (e) {
     return json({ error: "voli non disponibili", detail: String(e).slice(0, 120) }, 502, cors);
   }
@@ -1056,46 +1361,6 @@ async function handlePlan(req: Request, env: Env): Promise<Response> {
   return json({ steps }, 200, cors);
 }
 
-// ── /api/see — VISIONE OnlyType: il disegno È il prompt, WhyChat lo crea ──────
-function dataUrlToInline(dataUrl: string): { mimeType: string; data: string } | null {
-  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
-  return m ? { mimeType: m[1], data: m[2] } : null;
-}
-async function handleSee(req: Request, env: Env): Promise<Response> {
-  const cors = corsHeaders(req, env);
-  let body: { image?: unknown; prompt?: unknown };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "JSON non valido" }, 400, cors);
-  }
-  const inline = dataUrlToInline(String(body.image ?? ""));
-  if (!inline) return json({ error: "immagine non valida" }, 400, cors);
-  const ask = String(body.prompt ?? "").slice(0, 2000);
-  const sys =
-    SOUL +
-    nowContext() +
-    `\n\n[MODALITÀ ONLYTYPE — VISIONE] Ti arriva un DISEGNO/SCHIZZO fatto a mano. Il disegno È il prompt. Primo: descrivi a parole, in 1-2 frasi, cosa rappresenta. Poi RAGIONA sull'intento e CREA ciò che chiede: se è un'interfaccia, un sito, un diagramma, un grafico o un mini-gioco → emetti un artifact \`\`\`whyart (HTML autosufficiente) che lo realizza davvero; se è un'equazione o una formula → risolvila passo passo; se è un'idea → sviluppala. Non limitarti a descrivere: realizza.` +
-    (ask ? `\nL'utente aggiunge: "${ask}".` : "");
-  let text = "";
-  try {
-    const data = await geminiGenerate(env, {
-      systemInstruction: { parts: [{ text: sys }] },
-      contents: [
-        { role: "user", parts: [{ inlineData: inline }, { text: ask || "Guarda il disegno e crea ciò che rappresenta." }] },
-      ] as unknown,
-      generationConfig: { temperature: 0.8, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
-    });
-    text = (data.candidates?.[0]?.content?.parts ?? [])
-      .filter((p) => !p.thought)
-      .map((p) => p.text ?? "")
-      .join("");
-  } catch (e) {
-    return json({ error: "La visione non è disponibile ora. Riprova.", detail: String(e).slice(0, 160) }, 502, cors);
-  }
-  return json({ text }, 200, cors);
-}
-
 // ── /api/music — WhyMusic: analisi profonda di una traccia (metriche dal browser) ─
 async function handleMusic(req: Request, env: Env): Promise<Response> {
   const cors = corsHeaders(req, env);
@@ -1156,8 +1421,9 @@ export default {
       if (url.pathname === "/api/chat" && req.method === "POST") return await handleChat(req, env, ctx);
       if (url.pathname === "/api/think" && req.method === "POST") return await handleThink(req, env, ctx);
       if (url.pathname === "/api/plan" && req.method === "POST") return await handlePlan(req, env);
-      if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env);
       if (url.pathname === "/api/music" && req.method === "POST") return await handleMusic(req, env);
+      if (url.pathname === "/api/see" && req.method === "POST") return await handleSee(req, env, ctx);
+      if (url.pathname === "/api/reason" && req.method === "POST") return await handleReason(req, env, ctx);
       if (url.pathname === "/api/group" && req.method === "POST") return await handleGroup(req, env, ctx);
       if (url.pathname === "/api/group/predict" && req.method === "POST") return await handleGroupPredict(req, env, ctx);
       if (url.pathname === "/api/dreams" && req.method === "GET") return await handleDreams(req, env);

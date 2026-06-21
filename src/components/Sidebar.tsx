@@ -47,7 +47,7 @@ export default function Sidebar({
         style={{ willChange: "transform,width" }}
       >
         {/* brand: solo la scritta WhyChat, con l'effetto dia (niente orb) */}
-        <div className="flex items-center gap-2 px-3 pb-3 pt-3.5">
+        <div className="flex items-center gap-2 px-3.5 pb-3 pt-4">
           <DiaText
             text="WhyChat"
             repeat

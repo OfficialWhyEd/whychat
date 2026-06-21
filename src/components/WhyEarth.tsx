@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { geoOrthographic, geoPath, geoGraticule, geoBounds } from "d3-geo";
 import { timer } from "d3-timer";
-import { WORKER_URL, streamChat, geocodePlace, type ChatMessage as ApiMsg } from "../lib/api";
-
-interface Pin {
-  lng: number;
-  lat: number;
-  name: string;
-}
-const LUOGO_RE = /\[\[LUOGO:\s*([^\]]+)\]\]/gi;
+import { WORKER_URL } from "../lib/api";
 
 /**
  * WhyEarth — globo terrestre a puntini, dark e nei colori del brand (design
@@ -30,63 +23,6 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
   const flightsOnRef = useRef(false);
   const flightsRef = useRef<[number, number][]>([]); // [lng, lat]
   const renderRef = useRef<() => void>(() => {});
-  const pinsRef = useRef<Pin[]>([]);
-  const focusRef = useRef<(lng: number, lat: number) => void>(() => {});
-  const [pins, setPins] = useState<Pin[]>([]);
-
-  // chat connessa al planetario
-  const [chatOpen, setChatOpen] = useState(true);
-  const [emsgs, setEmsgs] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [einput, setEinput] = useState("");
-  const [ebusy, setEbusy] = useState(false);
-  const eAbort = useRef<AbortController | null>(null);
-
-  const addPinsFrom = async (text: string) => {
-    const found = [...text.matchAll(LUOGO_RE)].map((m) => m[1].trim()).slice(0, 6);
-    if (!found.length) return;
-    const geos = await Promise.all(found.map((q) => geocodePlace(q)));
-    const fresh = geos.filter((g): g is NonNullable<typeof g> => !!g).map((g) => ({ lng: g.lng, lat: g.lat, name: g.name }));
-    if (!fresh.length) return;
-    pinsRef.current = [...pinsRef.current, ...fresh].slice(-12);
-    setPins(pinsRef.current);
-    renderRef.current();
-    focusRef.current(fresh[0].lng, fresh[0].lat);
-  };
-
-  const askEarth = async () => {
-    const t = einput.trim();
-    if (!t || ebusy) return;
-    setEinput("");
-    const hist = [...emsgs, { role: "user" as const, content: t }];
-    setEmsgs([...hist, { role: "assistant", content: "" }]);
-    setEbusy(true);
-    const ctrl = new AbortController();
-    eAbort.current = ctrl;
-    let acc = "";
-    const setLast = (content: string) =>
-      setEmsgs((m) => {
-        const c = [...m];
-        c[c.length - 1] = { role: "assistant", content };
-        return c;
-      });
-    try {
-      await streamChat(
-        hist as ApiMsg[],
-        (d) => {
-          acc += d;
-          setLast(acc);
-        },
-        ctrl.signal,
-        "earth",
-      );
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") setLast(acc || `⚠ ${(e as Error).message}`);
-    } finally {
-      setEbusy(false);
-      eAbort.current = null;
-    }
-    void addPinsFrom(acc);
-  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -180,24 +116,6 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
           context.fill();
         }
       }
-      // pin dei luoghi citati dalla chat — cremisi con alone + etichetta
-      for (const pin of pinsRef.current) {
-        const p = projection([pin.lng, pin.lat]);
-        if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
-          context.beginPath();
-          context.arc(p[0], p[1], 5 * s, 0, 2 * Math.PI);
-          context.fillStyle = "rgba(201,75,37,0.25)";
-          context.fill();
-          context.beginPath();
-          context.arc(p[0], p[1], 2.4 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#c94b25";
-          context.fill();
-          context.font = `600 ${Math.round(11 * s)}px "Outfit", system-ui, sans-serif`;
-          context.fillStyle = "rgba(242,239,233,0.92)";
-          context.textAlign = "left";
-          context.fillText(pin.name, p[0] + 8 * s, p[1] + 3 * s);
-        }
-      }
       // voli live (se accesi) — ambra, piccoli
       if (flightsOnRef.current) {
         context.fillStyle = "#f0a36a";
@@ -229,18 +147,6 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
       }
     };
     renderRef.current = render;
-
-    // porta il globo a centrare un luogo (chiamato dalla chat sui pin)
-    focusRef.current = (lng: number, lat: number) => {
-      auto = false;
-      rotation[0] = -lng;
-      rotation[1] = -lat;
-      projection.rotate(rotation);
-      render();
-      window.setTimeout(() => {
-        auto = true;
-      }, 6000);
-    };
 
     const load = async () => {
       try {
@@ -390,79 +296,6 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
       </div>
 
       <div className="mono pointer-events-none absolute bottom-4 left-4 text-[0.5rem] text-faint">TRASCINA · ZOOM</div>
-
-      {/* Chat connessa al planetario: risponde a domande geografiche e pinna i luoghi */}
-      <div className="absolute bottom-3 left-1/2 z-10 w-[min(92vw,440px)] -translate-x-1/2">
-        <div className="overflow-hidden rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.82)] backdrop-blur-xl">
-          <button
-            onClick={() => setChatOpen((o) => !o)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left"
-          >
-            <span className="h-2 w-2 rounded-full bg-signal" style={{ boxShadow: "0 0 8px #c94b25" }} />
-            <span className="mono text-[0.55rem] text-dim">PLANETARIO · CHAT</span>
-            {pins.length > 0 && <span className="mono text-[0.5rem] text-faint">{pins.length} pin</span>}
-            <span className="flex-1" />
-            {pins.length > 0 && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pinsRef.current = [];
-                  setPins([]);
-                  renderRef.current();
-                }}
-                className="mono cursor-pointer text-[0.5rem] text-faint transition hover:text-signal-soft"
-              >
-                pulisci
-              </span>
-            )}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className={`text-faint transition-transform ${chatOpen ? "" : "rotate-180"}`}>
-              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-
-          <div className={`grid transition-all duration-300 ${chatOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-            <div className="overflow-hidden">
-              {emsgs.length > 0 && (
-                <div className="scroll-thin max-h-[34vh] overflow-y-auto border-t border-[var(--color-line)] px-3 py-2">
-                  {emsgs.map((m, i) => (
-                    <div key={i} className={`mb-2 text-[0.82rem] leading-relaxed ${m.role === "user" ? "text-paper" : "text-dim"}`}>
-                      <span className="mono mr-1.5 text-[0.5rem] text-faint">{m.role === "user" ? "TU" : "WHY"}</span>
-                      {m.content.replace(LUOGO_RE, "").trim() || (m.role === "assistant" && ebusy ? "…" : "")}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center gap-2 border-t border-[var(--color-line)] p-2">
-                <input
-                  value={einput}
-                  onChange={(e) => setEinput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      askEarth();
-                    }
-                  }}
-                  disabled={ebusy}
-                  placeholder="Dov'è il Kilimangiaro? Capitale del Perù?"
-                  className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[0.86rem] text-paper placeholder:text-faint focus:outline-none"
-                />
-                <button
-                  onClick={askEarth}
-                  disabled={ebusy || !einput.trim()}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[radial-gradient(125%_120%_at_50%_6%,#ffd2a4,#f0a36a_24%,#d4582c_56%,#8a2f17_100%)] text-[#0a0908] transition disabled:opacity-35"
-                  title="Chiedi"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

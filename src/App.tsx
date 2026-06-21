@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
@@ -17,7 +17,33 @@ import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import Vault from "./components/Vault";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, planSteps, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
+import type { MapPin } from "./components/WhyEarthLive";
+const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
+// estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
+const LUOGO_RE = /\[\[\s*LUOGO\s*:\s*([^\]]+?)\s*\]\]/i;
+
+// parole con l'iniziale maiuscola che NON sono luoghi (inizi frase / la chat)
+const PLACE_STOP = new Set([
+  "Il", "Lo", "La", "I", "Gli", "Le", "Un", "Uno", "Una", "Questo", "Questa", "Quando", "Come",
+  "Dove", "Perché", "Perche", "Sono", "Ecco", "Vuoi", "Ciao", "Parlami", "Dimmi", "Che", "Sì",
+  "Si", "No", "Ma", "Se", "Con", "Per", "Tra", "Fra", "Anche", "Ti", "Mi", "Ah", "Oh", "Beh",
+  "Ok", "Allora", "Certo", "WhyChat", "WhyEarth", "Edoardo", "WhyEd",
+]);
+
+// nomi propri candidati (sequenze Maiuscole) da geocodare per piantare il pin
+function placeCandidates(text: string): string[] {
+  const out: string[] = [];
+  const re = /([A-ZÀ-Ý][a-zà-ÿ']+(?:\s+[A-ZÀ-Ý][a-zà-ÿ']+){0,2})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null && out.length < 8) {
+    const cand = m[1].trim();
+    const first = cand.split(/\s+/)[0];
+    if (PLACE_STOP.has(first) || cand.length < 3) continue;
+    if (!out.includes(cand)) out.push(cand);
+  }
+  return out;
+}
 import { loadChats, saveChats, newChatId, titleFrom, type Chat } from "./lib/chats";
 import { pickOpeners } from "./persona/openers";
 import { getName, setName } from "./lib/visitor";
@@ -85,6 +111,36 @@ function Chat() {
   const entropy = mode === "entropy";
   const music = mode === "music";
   const ecosystem = mode === "ecosystem";
+
+  // WhyEarth: vista "Globo" (d3 a puntini, default) o "Mappa viva" (MapLibre).
+  // Il sogno: quando la chat nomina un luogo, vola lì e pianta il pin.
+  const [earthLive, setEarthLive] = useState(false);
+  const [mapPin, setMapPin] = useState<MapPin | null>(null);
+  const lastGeoRef = useRef("");
+  // testo dell'ultimo messaggio assistant completo (per cercarvi un luogo a stream finito)
+  const lastBotEarth = earth ? [...messages].reverse().find((m) => m.role === "assistant" && !m.streaming)?.content ?? "" : "";
+  const lastUserEarth = earth ? [...messages].reverse().find((m) => m.role === "user")?.content ?? "" : "";
+  useEffect(() => {
+    if (!earth || !lastBotEarth) return;
+    // 1) se il modello ha messo il marcatore [[LUOGO: ...]], usalo. 2) altrimenti
+    // estrai i nomi propri da domanda+risposta e geocoda il primo che esiste
+    // (così funziona anche con i modelli free che ignorano il marcatore).
+    const marker = LUOGO_RE.exec(lastBotEarth)?.[1]?.trim();
+    const cands = marker ? [marker] : [...placeCandidates(lastUserEarth), ...placeCandidates(lastBotEarth)];
+    const key = cands.join("|");
+    if (!cands.length || key === lastGeoRef.current) return;
+    lastGeoRef.current = key;
+    (async () => {
+      for (const c of cands.slice(0, 5)) {
+        const pin = await geocodePlace(c);
+        if (pin) {
+          setMapPin(pin);
+          setEarthLive(true); // vola sulla mappa viva quando emerge un luogo
+          break;
+        }
+      }
+    })();
+  }, [earth, lastBotEarth, lastUserEarth]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
@@ -412,7 +468,7 @@ function Chat() {
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Particelle confinate all'area principale → si allineano all'hero e si
             riallineano da sole quando la sidebar si apre/chiude */}
-        <SoulParticles formText={empty && !sheet && !group && !earth && !music && !ecosystem} modelName={modelName(model)} />
+        <SoulParticles formText={empty && !sheet && !group && !earth && !entropy && !music && !ecosystem} modelName={modelName(model)} />
         {/* Top bar */}
         <header className="flex items-center justify-between gap-2 px-4 py-3">
           <button
@@ -471,13 +527,67 @@ function Chat() {
               onExit={() => setMode("chat")}
             />
           </main>
-        ) : earth ? (
-          <main className="min-h-0 flex-1">
-            <WhyEarth onExit={() => setMode("chat")} />
-          </main>
-        ) : entropy ? (
-          <main className="min-h-0 flex-1">
-            <WhyEntropy onExit={() => setMode("chat")} />
+        ) : earth || entropy ? (
+          <main className="relative min-h-0 flex-1 overflow-hidden">
+            {/* il visivo (globo / geometria) resta protagonista, sullo sfondo */}
+            <div className="absolute inset-0">
+              {earth ? (
+                earthLive ? (
+                  <Suspense
+                    fallback={<div className="mono grid h-full place-items-center text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
+                  >
+                    <WhyEarthLive focus={mapPin} onExit={() => setMode("chat")} />
+                  </Suspense>
+                ) : (
+                  <WhyEarth onExit={() => setMode("chat")} />
+                )
+              ) : (
+                <WhyEntropy onExit={() => setMode("chat")} />
+              )}
+            </div>
+            {/* toggle vista: Globo a puntini (default) ↔ Mappa viva (vola+pin) */}
+            {earth && (
+              <div className="absolute right-4 top-16 z-10 flex overflow-hidden rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] text-[0.5rem] backdrop-blur">
+                <button
+                  onClick={() => setEarthLive(false)}
+                  className={`mono px-2.5 py-1 transition ${!earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
+                >
+                  GLOBO
+                </button>
+                <button
+                  onClick={() => setEarthLive(true)}
+                  className={`mono px-2.5 py-1 transition ${earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
+                >
+                  MAPPA VIVA
+                </button>
+              </div>
+            )}
+            {/* la conversazione galleggia sopra: il mondo resta visibile, le risposte appaiono */}
+            {!empty && (
+              <div className="scroll-thin pointer-events-none absolute inset-x-0 bottom-0 top-1/3 flex flex-col justify-end overflow-y-auto">
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 pb-3">
+                  {messages.map((m, i) => (
+                    <div
+                      key={m.id}
+                      className="pointer-events-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.74)] backdrop-blur-md"
+                    >
+                      <ChatMessage
+                        msg={earth ? { ...m, content: m.content.replace(LUOGO_RE, "").trimEnd() } : m}
+                        onRetry={
+                          m.role === "assistant" && !streaming
+                            ? () => {
+                                const prevUser = [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
+                                if (prevUser) send(prevUser.content);
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                  ))}
+                  <div ref={bottomRef} className="h-1" />
+                </div>
+              </div>
+            )}
           </main>
         ) : music ? (
           <main className="min-h-0 flex-1">
@@ -527,7 +637,7 @@ function Chat() {
         )}
 
         {/* Composer — nascosto in group mode (GroupChat ha il suo input) */}
-        <footer className={`px-4 pb-4 pt-2 ${group || earth || entropy || sheet || music || ecosystem ? "hidden" : ""}`}>
+        <footer className={`px-4 pb-4 pt-2 ${group || sheet || music || ecosystem ? "hidden" : ""}`}>
           <div className="relative mx-auto max-w-2xl">
             <AnimatePresence>
               {!atBottom && !empty && !sheet && !earth && !entropy && (
