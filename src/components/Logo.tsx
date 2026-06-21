@@ -1,26 +1,20 @@
-import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { DiaText } from "./effects/DiaText";
 
 /**
- * Logo — la scritta del marchio (font Loverine) che si COMPONE lettera per lettera
- * con l'effetto Apple (blur + risalita, ease-in/out morbido), tiene, poi si dissolve
- * e si ricompone in loop. Mantiene lo shimmer "dia" continuo sulle lettere.
+ * Logo — la scritta WhyChat (font Loverine) come UN gesto unico e preciso: entra
+ * morbida (blur+fade, ease-in-out), una banda di colore "dia" la attraversa da
+ * sinistra a destra sul testo VERO (niente contorni tracciati, niente maschere
+ * strane), tiene, poi esce/sparisce e ricomincia. Pulito, enfatizzato, stiloso.
  */
-const container: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.055, delayChildren: 0.04 } },
-  exit: { transition: { staggerChildren: 0.028 } },
-};
-const letter: Variants = {
-  hidden: { opacity: 0, y: "0.45em", filter: "blur(8px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
-  exit: { opacity: 0, y: "-0.4em", filter: "blur(8px)", transition: { duration: 0.42, ease: [0.55, 0, 1, 0.45] } },
-};
+const SWEEP = 1.8; // durata della banda dia (entrata) — ease-in-out interno
+const ENTER = 0.55;
 
 export default function Logo({
   text = "WhyChat",
   className = "",
-  hold = 7000,
+  hold = 5200,
 }: {
   text?: string;
   className?: string;
@@ -28,7 +22,7 @@ export default function Logo({
 }) {
   const [cycle, setCycle] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setCycle((c) => c + 1), hold);
+    const t = setTimeout(() => setCycle((c) => c + 1), hold + SWEEP * 1000 + 700);
     return () => clearTimeout(t);
   }, [cycle, hold]);
 
@@ -37,17 +31,23 @@ export default function Logo({
       <AnimatePresence mode="wait">
         <motion.span
           key={cycle}
-          variants={container}
-          initial="hidden"
-          animate="show"
-          exit="exit"
-          className="inline-flex"
+          className="inline-block"
+          style={{ filter: "drop-shadow(0 0 20px rgba(201,75,37,0.28))" }}
+          initial={{ opacity: 0, filter: "blur(12px)", y: 8 }}
+          animate={{
+            opacity: 1,
+            filter: "blur(0px)",
+            y: 0,
+            transition: { duration: ENTER, ease: [0.22, 1, 0.36, 1] },
+          }}
+          exit={{
+            opacity: 0,
+            filter: "blur(12px)",
+            y: -8,
+            transition: { duration: 0.5, ease: [0.55, 0, 1, 0.45] },
+          }}
         >
-          {text.split("").map((ch, i) => (
-            <motion.span key={i} variants={letter} className="logo-letter inline-block">
-              {ch === " " ? " " : ch}
-            </motion.span>
-          ))}
+          <DiaText text={text} triggerOnView={false} duration={SWEEP} className="inline-block" />
         </motion.span>
       </AnimatePresence>
     </span>
