@@ -16,6 +16,7 @@ import Sidebar from "./components/Sidebar";
 import JumpToBottom from "./components/JumpToBottom";
 import ChatMessage, { type Message } from "./components/ChatMessage";
 import ChatMinimap from "./components/ChatMinimap";
+import ArtifactPanel, { type ArtifactData } from "./components/ArtifactPanel";
 import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
@@ -105,6 +106,9 @@ function Chat() {
   // Sei "attaccato" al fondo? Se hai scrollato su per rileggere, NON ti strappiamo giù.
   const [atBottom, setAtBottom] = useState(true);
   const atBottomRef = useRef(true);
+  // Artifact aperto nel pannello laterale (stile Claude Desktop).
+  const [artifact, setArtifact] = useState<ArtifactData | null>(null);
+  const openArtifact = useCallback((title: string, html: string) => setArtifact({ title, html }), []);
 
   const active = chats.find((c) => c.id === activeId) ?? null;
   const messages = active?.messages ?? [];
@@ -654,6 +658,7 @@ function Chat() {
                         <ChatMessage
                           msg={m}
                           prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
+                          onOpenArtifact={openArtifact}
                           onRetry={
                             m.role === "assistant" && !streaming
                               ? () => {
@@ -709,6 +714,8 @@ function Chat() {
           </div>
         </footer>
       </div>
+
+      {artifact && <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} />}
 
       {error && (
         <div className="pointer-events-none fixed bottom-24 left-1/2 z-20 -translate-x-1/2 text-xs text-signal-soft">

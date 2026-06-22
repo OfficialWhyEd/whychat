@@ -9,10 +9,12 @@ export default function Artifact({
   title,
   html,
   building,
+  onOpen,
 }: {
   title: string;
   html: string;
   building: boolean;
+  onOpen?: (title: string, html: string) => void; // apri nel pannello laterale (Claude Desktop)
 }) {
   const [open, setOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -53,8 +55,8 @@ export default function Artifact({
               ↻
             </button>
             <button
-              onClick={() => setOpen(true)}
-              title="A tutto schermo"
+              onClick={() => (onOpen ? onOpen(title, html) : setOpen(true))}
+              title="Apri nel pannello"
               className="rounded-md px-2 py-1 text-[0.7rem] text-faint transition hover:text-paper"
             >
               ⤢
