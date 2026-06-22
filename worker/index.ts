@@ -768,12 +768,13 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
     : body.image
       ? [String(body.image)]
       : [];
+  // accetta qualsiasi mime che Gemini sa leggere: immagini, PDF, video, audio
   const imageParts = rawImages
-    .map((u) => /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(u))
+    .map((u) => /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(u))
     .filter((x): x is RegExpExecArray => !!x)
-    .slice(0, 6)
-    .map((x) => ({ inlineData: { mimeType: x[1], data: x[2].slice(0, 5_000_000) } }));
-  if (!imageParts.length) return json({ error: "immagine non valida" }, 400, cors);
+    .slice(0, 8)
+    .map((x) => ({ inlineData: { mimeType: x[1], data: x[2].slice(0, 8_000_000) } }));
+  if (!imageParts.length) return json({ error: "nessun file leggibile" }, 400, cors);
   const prompt = String(body.prompt ?? "").slice(0, MAX_MESSAGE_CHARS) || "Guarda il mio foglio e dimmi cosa vedi.";
   const name = String(body.name ?? "").slice(0, 80);
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);

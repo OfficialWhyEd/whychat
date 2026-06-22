@@ -230,12 +230,14 @@ function Chat() {
     if (useMode !== mode) setMode(useMode);
 
     const atts = attachments ?? [];
-    const images = atts.map((a) => a.image).filter((x): x is string => !!x); // immagini + frame video → vision
-    // contenuto inviato al modello: testo + contenuto dei file di testo + note dei file
+    // file che GEMINI legge davvero (immagini, frame video, PDF…): mandati come inlineData
+    const media = atts.map((a) => a.data).filter((x): x is string => !!x);
+    // contenuto testuale dei file di testo (md/html/json/csv/codice) → nel prompt
     const textParts = atts.filter((a) => a.text).map((a) => `[Contenuto del file "${a.name}"]:\n${a.text}`);
+    // solo i file NON leggibili (doc/xls/zip…) restano una nota col nome
     const noteParts = atts
-      .filter((a) => !a.image && !a.text)
-      .map((a) => `[Allegato: ${a.name}${a.kind === "video" ? " (video)" : ""}]`);
+      .filter((a) => !a.data && !a.text)
+      .map((a) => `[Allegato non leggibile: ${a.name}]`);
     const sentContent = [text, ...textParts, ...noteParts].filter(Boolean).join("\n\n");
     // ciò che si VEDE nel bubble: le anteprime (immagini/frame/file), pulite
     const dispAtts = atts.map((a) => ({ image: a.image, name: a.name, kind: a.kind }));
@@ -281,16 +283,16 @@ function Chat() {
       );
 
     try {
-      if (images.length) {
-        // Ci sono immagini (anche più, e/o frame video): WhyChat le GUARDA (vision).
+      if (media.length) {
+        // Ci sono file leggibili da Gemini (immagini/frame video/PDF): li LEGGE.
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         let acc = "";
         const visionPrompt =
-          [text, ...textParts].filter(Boolean).join("\n\n") ||
-          "Guarda" + (images.length > 1 ? " queste immagini" : " questa immagine") + " e aiutami: descrivi, spiega o crea ciò che serve.";
+          [text, ...textParts, ...noteParts].filter(Boolean).join("\n\n") ||
+          "Leggi" + (media.length > 1 ? " questi file" : " questo file") + " e aiutami: descrivi, spiega, estrai o crea ciò che serve.";
         await seeSheet(
-          images,
+          media,
           visionPrompt,
           baseMessages.map((m) => ({ role: m.role, content: m.content })),
           (d) => {
