@@ -4,7 +4,22 @@ import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
-import { FileCard, formatOf } from "./ui/file-card-collections";
+import FileChip from "./FileChip";
+
+// X di rimozione DENTRO l'angolo (mai tagliata dallo scroll) per immagini/video
+function RemoveX({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Rimuovi"
+      className="absolute right-0.5 top-0.5 z-10 grid h-5 w-5 place-items-center rounded-full border border-[var(--color-line2)] bg-[#141009]/90 text-faint shadow-sm backdrop-blur-sm transition hover:text-paper"
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
 
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
@@ -383,42 +398,32 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.22, ease: EASE_OUT }}
-              className="scroll-none mb-1.5 flex items-start gap-2 overflow-x-auto px-0.5 pb-0.5 pt-1"
+              className="scroll-none mb-1.5 flex items-center gap-2 overflow-x-auto px-0.5 pb-0.5 pt-1"
             >
-              {attachments.map((a) => (
-                <div key={a.id} className="flex shrink-0 flex-col items-center gap-1">
-                  {/* anteprima + X DENTRO l'angolo (mai tagliata dallo scroll) */}
-                  <div className="relative">
-                    {a.kind === "video" && a.url ? (
-                      <video
-                        src={a.url}
-                        muted
-                        playsInline
-                        controls
-                        className="h-16 w-24 rounded-xl border border-[var(--color-line2)] bg-black object-cover"
-                      />
-                    ) : a.image ? (
-                      <img src={a.image} alt={a.name} className="h-16 w-16 rounded-xl border border-[var(--color-line2)] object-cover" />
-                    ) : (
-                      // ogni altro file → FileCard per-formato (pdf/md/csv/zip/code/json…)
-                      <div className="grid h-16 place-items-center px-2" title={a.name}>
-                        <FileCard formatFile={formatOf(a.name)} />
-                      </div>
-                    )}
-                    <button
-                      onClick={() => removeAttach(a.id)}
-                      title="Rimuovi"
-                      className="absolute right-0.5 top-0.5 z-10 grid h-5 w-5 place-items-center rounded-full border border-[var(--color-line2)] bg-[#141009]/90 text-faint shadow-sm backdrop-blur-sm transition hover:text-paper"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-                      </svg>
-                    </button>
+              {attachments.map((a) =>
+                a.kind === "video" && a.url ? (
+                  <div key={a.id} className="relative shrink-0">
+                    <video
+                      src={a.url}
+                      muted
+                      playsInline
+                      controls
+                      className="h-16 w-24 rounded-xl border border-[var(--color-line2)] bg-black object-cover"
+                    />
+                    <RemoveX onClick={() => removeAttach(a.id)} />
                   </div>
-                  {/* nome del file, sotto */}
-                  <span className="mono w-full max-w-[96px] truncate text-center text-[0.5rem] text-dim">{a.name}</span>
-                </div>
-              ))}
+                ) : a.image ? (
+                  <div key={a.id} className="relative shrink-0">
+                    <img src={a.image} alt={a.name} className="h-16 w-16 rounded-xl border border-[var(--color-line2)] object-cover" />
+                    <RemoveX onClick={() => removeAttach(a.id)} />
+                  </div>
+                ) : (
+                  // ogni altro file → chip stile Claude (icona + nome + tipo)
+                  <div key={a.id} className="shrink-0">
+                    <FileChip name={a.name} onRemove={() => removeAttach(a.id)} />
+                  </div>
+                ),
+              )}
             </motion.div>
           )}
         </AnimatePresence>
