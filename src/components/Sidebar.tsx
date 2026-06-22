@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { relativeTime, type Chat } from "../lib/chats";
 import Logo from "./Logo";
 import { MODES, type Mode } from "./CommandComposer";
@@ -6,7 +7,16 @@ import { ProtocolBadge } from "./ProtocolBadge";
 // icona della modalità in cui è nata la chat (default: chat)
 const chatModeIcon = (m?: Mode) => MODES.find((x) => x.id === (m ?? "chat"))?.icon ?? null;
 
-// L'orb è l'anima-logo di WhyChat. Ora canvas 2D puro: leggero, import diretto.
+// Raggruppa per data come Claude Desktop: Oggi / Ieri / Ultimi 7 giorni / Prima.
+function sectionOf(ts: number): string {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startToday) return "Oggi";
+  if (ts >= startToday - 86400_000) return "Ieri";
+  if (ts >= startToday - 7 * 86400_000) return "Ultimi 7 giorni";
+  return "Prima";
+}
+const SECTION_ORDER = ["Oggi", "Ieri", "Ultimi 7 giorni", "Prima"];
 
 interface Props {
   chats: Chat[];
@@ -16,6 +26,7 @@ interface Props {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onClose: () => void;
 }
 
@@ -26,8 +37,33 @@ export default function Sidebar({
   onSelect,
   onNew,
   onDelete,
+  onRename,
   onClose,
 }: Props) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  const startRename = (c: Chat) => {
+    setDraft(c.title);
+    setEditing(c.id);
+  };
+  const commitRename = () => {
+    if (editing) onRename(editing, draft);
+    setEditing(null);
+  };
+
+  // Più recente in cima, sempre. Poi spezzata in sezioni temporali.
+  const sorted = [...chats].sort((a, b) => b.ts - a.ts);
+  const groups = SECTION_ORDER.map((label) => ({
+    label,
+    items: sorted.filter((c) => sectionOf(c.ts) === label),
+  })).filter((g) => g.items.length > 0);
+
   return (
     <>
       {/* scrim mobile */}
@@ -83,57 +119,99 @@ export default function Sidebar({
               appariranno qui.
             </p>
           ) : (
-            <div className="flex flex-col gap-0.5">
-              {chats.map((c) => {
-                const isActive = c.id === activeId;
-                return (
-                  <div
-                    key={c.id}
-                    className={`group relative flex items-center rounded-lg transition ${
-                      isActive ? "bg-[rgba(201,75,37,0.14)]" : "hover:bg-[rgba(242,239,233,0.04)]"
-                    }`}
-                  >
-                    <button
-                      onClick={() => onSelect(c.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-                    >
-                      <span
-                        className={`grid h-4 w-4 shrink-0 place-items-center [&_svg]:h-3.5 [&_svg]:w-3.5 ${
-                          isActive ? "text-signal" : "text-faint"
-                        }`}
-                        title={MODES.find((x) => x.id === (c.mode ?? "chat"))?.label}
-                      >
-                        {chatModeIcon(c.mode)}
-                      </span>
-                      <span
-                        className={`min-w-0 flex-1 truncate text-[0.8rem] ${
-                          isActive ? "text-paper" : "text-dim"
-                        }`}
-                      >
-                        {c.title}
-                      </span>
-                      <span className="mono shrink-0 text-[0.5rem] text-faint transition-opacity group-hover:opacity-0">
-                        {relativeTime(c.ts)}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => onDelete(c.id)}
-                      title="Elimina"
-                      className="absolute right-1.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition hover:bg-[rgba(0,0,0,0.3)] hover:text-signal-soft group-hover:opacity-100"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                        <path
-                          d="M6 7h12M9 7V5h6v2M7 7l1 13h8l1-13"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
+            <div className="flex flex-col gap-2">
+              {groups.map((g) => (
+                <div key={g.label} className="flex flex-col gap-0.5">
+                  <div className="mono px-3 pb-0.5 pt-1.5 text-[0.46rem] uppercase tracking-[0.14em] text-faint/70">
+                    {g.label}
                   </div>
-                );
-              })}
+                  {g.items.map((c) => {
+                    const isActive = c.id === activeId;
+                    const isEditing = editing === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={`group relative flex items-center rounded-lg transition ${
+                          isActive ? "bg-[rgba(201,75,37,0.14)]" : "hover:bg-[rgba(242,239,233,0.04)]"
+                        }`}
+                      >
+                        {isEditing ? (
+                          <input
+                            ref={inputRef}
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRename();
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            onBlur={commitRename}
+                            className="min-w-0 flex-1 rounded-lg bg-[rgba(0,0,0,0.35)] px-3 py-2 text-[0.8rem] text-paper outline-none ring-1 ring-signal/40"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => onSelect(c.id)}
+                            onDoubleClick={() => startRename(c)}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+                          >
+                            <span
+                              className={`grid h-4 w-4 shrink-0 place-items-center [&_svg]:h-3.5 [&_svg]:w-3.5 ${
+                                isActive ? "text-signal" : "text-faint"
+                              }`}
+                              title={MODES.find((x) => x.id === (c.mode ?? "chat"))?.label}
+                            >
+                              {chatModeIcon(c.mode)}
+                            </span>
+                            <span
+                              className={`min-w-0 flex-1 truncate text-[0.8rem] ${
+                                isActive ? "text-paper" : "text-dim"
+                              }`}
+                            >
+                              {c.title}
+                            </span>
+                            <span className="mono shrink-0 text-[0.5rem] text-faint transition-opacity group-hover:opacity-0">
+                              {relativeTime(c.ts)}
+                            </span>
+                          </button>
+                        )}
+                        {!isEditing && (
+                          <div className="absolute right-1 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                            <button
+                              onClick={() => startRename(c)}
+                              title="Rinomina"
+                              className="grid h-6 w-6 place-items-center rounded-md text-faint transition hover:bg-[rgba(0,0,0,0.3)] hover:text-paper"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                <path
+                                  d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => onDelete(c.id)}
+                              title="Elimina"
+                              className="grid h-6 w-6 place-items-center rounded-md text-faint transition hover:bg-[rgba(0,0,0,0.3)] hover:text-signal-soft"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                <path
+                                  d="M6 7h12M9 7V5h6v2M7 7l1 13h8l1-13"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>
