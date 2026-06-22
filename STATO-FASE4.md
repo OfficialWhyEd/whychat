@@ -1,6 +1,7 @@
 # WhyChat — Bozza di tutto (stato verificato nel codice) · Fase 4
 
-> Letti i 4 paper + FASE3-DA-FARE + le 27 voci TODO, e **controllato nel codice reale** cosa è fatto.
+> Letti **integralmente** i 4 paper (Parte1 cronologia msg-per-msg, Parte2 media/note a mano, Parte3 psicologia, Parte4 TODO) + FASE3-DA-FARE + le 27 voci, e **controllato nel codice reale** cosa è fatto.
+> Note a mano (IMG_9886/9918/9919) lette e mappate: error screen 🟡, sidebar+artifact ✅, upload immagini ✅ (video follow-up), transizioni 🟡.
 > Legenda: ✅ fatto e verificato · 🟡 parziale/da rifinire · 🔴 da fare · 🔒 bloccato (serve azione di Edo)
 > Si spedisce **un pezzo alla volta**, ognuno buildato verde + screenshot prima di dire "fatto".
 
@@ -19,8 +20,8 @@ Il token nel Portachiavi **deploya ma non ha permesso KV** (verificato: errore 1
 | 3 | Logo "WhyChat" Loverine, gesto unico, shimmer | ✅ (DiaText + font Loverine) |
 | 22 | Barra composer proporzioni/liquid glass | 🟡 rifinita, manca pass "assurdo" completo |
 | — | Sidebar stile Claude (recency, gruppi data, rename, no-overlay new chat) | ✅ Fase 4 |
-| 2 | Sidebar + pannello Artifact "identici a Claude Desktop" | 🟡 sidebar fatta; pannello artifact da rivedere |
-| 4 | Upload file/immagini nella barra | ✅ Fase 4 (allega → vision /api/see) |
+| 2 | Sidebar + pannello Artifact "identici a Claude Desktop" | ✅ Fase 4 (sidebar Claude-style + pannello artifact agganciato split) |
+| 4 | Upload file/immagini nella barra | ✅ immagini (vision /api/see) · 🔴 video (follow-up: frame→vision) |
 | 7 | Animazione di ogni icona (triggerabile) | ✅ AnimatedIcon |
 | 6 | Transizioni entrata→uscita modalità | 🟡 presenti, da curare |
 | 20 | Jump-to-bottom liquid glass | ✅ |
@@ -34,7 +35,7 @@ Il token nel Portachiavi **deploya ma non ha permesso KV** (verificato: errore 1
 | 10 | Adaptive reasoning + "Rispondi ora" | 🟡 /api/reason c'è; bottone da verificare |
 | 11 | Deep Thinking visibile | ✅ |
 | 12 | Group Prediction UI multi-agente | 🟡 backend ✅, UI da rifinire (KV per memoria) |
-| 13 | WhyEarth chat-nel-globo + pin + toggle | 🟡 pin+toggle ✅, "immagini sul globo" 🔴 |
+| 13 | WhyEarth chat-nel-globo + pin + toggle | ✅ pin+toggle+chat; immagine del luogo ✅ Fase 4 |
 | 14 | WhyMusic analisi traccia | ✅ |
 | 15 | WhyEntropy conversabile | ✅ system prompt a tema + overlay chat (verificato) |
 | 16 | Plan Mode su task complessi | ✅ /api/plan + AgentPlanning |
