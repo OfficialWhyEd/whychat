@@ -3,6 +3,7 @@ import { relativeTime, type Chat } from "../lib/chats";
 import Logo from "./Logo";
 import { MODES, type Mode } from "./CommandComposer";
 import { ProtocolBadge } from "./ProtocolBadge";
+import { AnimatedIcon } from "./effects/AnimatedIcon";
 
 // icona della modalità in cui è nata la chat (default: chat)
 const chatModeIcon = (m?: Mode) => MODES.find((x) => x.id === (m ?? "chat"))?.icon ?? null;
@@ -103,9 +104,11 @@ export default function Sidebar({
             onClick={onNew}
             className="group flex w-full items-center gap-2 rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.03)] px-3 py-2.5 text-[0.82rem] text-dim transition hover:border-signal/50 hover:text-paper"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-signal">
-              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-            </svg>
+            <AnimatedIcon pop={false} className="text-signal">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+              </svg>
+            </AnimatedIcon>
             Nuova conversazione
           </button>
         </div>
@@ -180,30 +183,34 @@ export default function Sidebar({
                               title="Rinomina"
                               className="grid h-6 w-6 place-items-center rounded-md text-faint transition hover:bg-[rgba(0,0,0,0.3)] hover:text-paper"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                                <path
-                                  d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
+                              <AnimatedIcon pop={false}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                  <path
+                                    d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </AnimatedIcon>
                             </button>
                             <button
                               onClick={() => onDelete(c.id)}
                               title="Elimina"
                               className="grid h-6 w-6 place-items-center rounded-md text-faint transition hover:bg-[rgba(0,0,0,0.3)] hover:text-signal-soft"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                                <path
-                                  d="M6 7h12M9 7V5h6v2M7 7l1 13h8l1-13"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
+                              <AnimatedIcon pop={false}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                  <path
+                                    d="M6 7h12M9 7V5h6v2M7 7l1 13h8l1-13"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </AnimatedIcon>
                             </button>
                           </div>
                         )}

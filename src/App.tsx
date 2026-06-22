@@ -612,9 +612,11 @@ function Chat() {
             aria-label={sidebar ? "Chiudi cronologia" : "Apri cronologia"}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line2)] text-dim transition hover:text-paper"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <AnimatedIcon pop={false}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </AnimatedIcon>
           </button>
           <ModelSelector model={model} onModel={setModel} />
           {ttsSupported() && (
@@ -632,17 +634,19 @@ function Chat() {
                   : "border-[var(--color-line2)] text-faint hover:text-paper"
               }`}
             >
-              {autoTts ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
-                  <path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
-                  <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-              )}
+              <AnimatedIcon pop={false} active={autoTts}>
+                {autoTts ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                    <path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                    <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                )}
+              </AnimatedIcon>
             </button>
           )}
           <button
