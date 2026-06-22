@@ -113,6 +113,21 @@ export default function ChatMessage({
   const [vote, setVote] = useState<"up" | "down" | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // anteprima dei link nelle risposte (HoverPreview): hover su un <a> → card
+  const [linkPrev, setLinkPrev] = useState<{ href: string; x: number; y: number } | null>(null);
+  const linkHandlers = {
+    onMouseOver: (e: React.MouseEvent) => {
+      const a = (e.target as HTMLElement).closest("a") as HTMLAnchorElement | null;
+      if (a?.href) setLinkPrev({ href: a.href, x: e.clientX, y: e.clientY });
+    },
+    onMouseMove: (e: React.MouseEvent) => {
+      setLinkPrev((p) => (p ? { ...p, x: e.clientX, y: e.clientY } : p));
+    },
+    onMouseOut: (e: React.MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("a")) return;
+      setLinkPrev(null);
+    },
+  };
 
   // mentre QUESTO messaggio parla, l'ampiezza reale del TTS pilota il bordo
   // metallico (variabile CSS --v 0..1). Niente luce al centro: la voce vive
@@ -249,7 +264,13 @@ export default function ChatMessage({
         {thinking ? (
           <ReasoningPanel thoughts={msg.thoughts ?? ""} label={thinkingLabel} onRespondNow={onRespondNow} />
         ) : (
-          <div ref={bodyRef} className={`wc-bot-body${speaking ? " wc-speak" : ""}`}>
+          <div
+            ref={bodyRef}
+            className={`wc-bot-body${speaking ? " wc-speak" : ""}`}
+            onMouseOver={linkHandlers.onMouseOver}
+            onMouseMove={linkHandlers.onMouseMove}
+            onMouseOut={linkHandlers.onMouseOut}
+          >
             {parseSegments(msg.content || "").map((seg, i) =>
               seg.type === "artifact" ? (
                 <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} onOpen={onOpenArtifact} />
@@ -262,6 +283,7 @@ export default function ChatMessage({
               ),
             )}
             {msg.streaming && <span className="caret" />}
+            {linkPrev && <LinkPreviewCard href={linkPrev.href} x={linkPrev.x} y={linkPrev.y} />}
           </div>
         )}
 
@@ -346,6 +368,44 @@ export default function ChatMessage({
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Card di anteprima di un link (HoverPreview): favicon + dominio + percorso.
+// Posizionata sopra il cursore, dentro lo schermo.
+function LinkPreviewCard({ href, x, y }: { href: string; x: number; y: number }) {
+  let host = href;
+  let path = "";
+  try {
+    const u = new URL(href);
+    host = u.hostname.replace(/^www\./, "");
+    path = u.pathname === "/" ? "" : decodeURIComponent(u.pathname);
+  } catch {
+    /* href non valido: mostro la stringa così com'è */
+  }
+  const left = Math.min(Math.max(12, x - 130), (typeof window !== "undefined" ? window.innerWidth : 1280) - 272);
+  const top = Math.max(12, y - 88);
+  return (
+    <div
+      className="pointer-events-none fixed z-50 w-[260px] overflow-hidden rounded-xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.94)] shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur"
+      style={{ left, top }}
+    >
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${host}&sz=64`}
+          alt=""
+          className="h-7 w-7 shrink-0 rounded-md bg-[rgba(242,239,233,0.06)]"
+          referrerPolicy="no-referrer"
+        />
+        <div className="min-w-0">
+          <div className="truncate text-[0.72rem] text-paper">{host}</div>
+          {path && <div className="mono truncate text-[0.5rem] text-faint">{path}</div>}
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="ml-auto shrink-0 text-faint">
+          <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
     </div>
   );
