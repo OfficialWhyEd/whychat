@@ -97,10 +97,12 @@ export default function ChatMessage({
   msg,
   onRetry,
   prompt = "",
+  onOpenArtifact,
 }: {
   msg: Message;
   onRetry?: () => void;
   prompt?: string; // la domanda che ha generato questa risposta → tema del ragionamento
+  onOpenArtifact?: (title: string, html: string) => void; // apri l'artifact nel pannello laterale
 }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
@@ -233,7 +235,7 @@ export default function ChatMessage({
           <div ref={bodyRef} className={`wc-bot-body${speaking ? " wc-speak" : ""}`}>
             {parseSegments(msg.content || "").map((seg, i) =>
               seg.type === "artifact" ? (
-                <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} />
+                <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} onOpen={onOpenArtifact} />
               ) : (
                 <div
                   key={i}
