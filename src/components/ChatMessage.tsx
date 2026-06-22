@@ -41,7 +41,7 @@ function planToSteps(plan: PlanStepData[], active: number, streaming: boolean): 
   });
 }
 
-// micro-azioni che scorrono mentre WhyChat prepara la risposta (stile Claude Code)
+// micro-azioni generiche (fallback se non c'è una domanda da cui pescare il tema)
 const THINK_PHASES = [
   "Leggo la richiesta",
   "Collego le idee",
@@ -51,6 +51,36 @@ const THINK_PHASES = [
   "Affino",
   "Rileggo",
 ];
+
+// parole da ignorare quando estraggo il "tema" della domanda
+const STOP = new Set([
+  "come", "cosa", "quando", "dove", "perché", "perche", "quale", "quali", "chi", "quanto", "quanta",
+  "che", "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "da", "in", "con", "su", "per",
+  "tra", "fra", "del", "della", "dei", "delle", "dello", "degli", "mi", "ti", "si", "ci", "vi", "ne",
+  "è", "e", "ed", "o", "ma", "se", "non", "più", "meno", "molto", "poco", "fammi", "dimmi", "spiegami",
+  "parlami", "scrivimi", "puoi", "vorrei", "voglio", "dammi", "raccontami", "the", "what", "how", "why",
+  "and", "for", "with", "about", "tell", "give", "make", "write", "explain", "your", "you",
+]);
+
+// Estrae il "tema" della domanda (le 1-2 parole più contentful) per mostrare
+// a COSA sta ragionando, non solo "sto ragionando". "in pochissime parole".
+function topicOf(prompt: string): string {
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^a-zà-ÿ0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP.has(w));
+  if (!words.length) return "";
+  const uniq = [...new Set(words)].sort((a, b) => b.length - a.length).slice(0, 2);
+  return uniq.join(" ");
+}
+
+// Fasi di ragionamento ANCORATE al tema della domanda (stile Claude Code).
+function thinkPhasesFor(prompt: string): string[] {
+  const topic = topicOf(prompt);
+  if (!topic) return THINK_PHASES;
+  return [`Penso a «${topic}»`, `Cerco il filo su ${topic}`, "Soppeso le parole", "Compongo", "Affino"];
+}
 
 export interface Message {
   id: string;
@@ -62,7 +92,15 @@ export interface Message {
   planActive?: number; // indice del passo in corso (precedenti = fatti)
 }
 
-export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: () => void }) {
+export default function ChatMessage({
+  msg,
+  onRetry,
+  prompt = "",
+}: {
+  msg: Message;
+  onRetry?: () => void;
+  prompt?: string; // la domanda che ha generato questa risposta → tema del ragionamento
+}) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
@@ -103,9 +141,11 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
   // reale; altrimenti ciclo micro-azioni personalizzate.
   const [phaseI, setPhaseI] = useState(0);
   const thinking = !!msg.streaming && !msg.content;
+  const phases = useRef<string[]>(THINK_PHASES);
+  phases.current = thinkPhasesFor(prompt);
   useEffect(() => {
     if (!thinking) return;
-    const id = setInterval(() => setPhaseI((i) => (i + 1) % THINK_PHASES.length), 1600);
+    const id = setInterval(() => setPhaseI((i) => (i + 1) % phases.current.length), 1600);
     return () => clearInterval(id);
   }, [thinking]);
   const lastThought = msg.thoughts
@@ -114,7 +154,7 @@ export default function ChatMessage({ msg, onRetry }: { msg: Message; onRetry?: 
         .trim()
         .slice(0, 90)
     : "";
-  const thinkingLabel = lastThought || THINK_PHASES[phaseI];
+  const thinkingLabel = lastThought || phases.current[phaseI % phases.current.length];
 
   const copy = async () => {
     try {
