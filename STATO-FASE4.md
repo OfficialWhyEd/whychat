@@ -20,7 +20,7 @@ Il token nel Portachiavi **deploya ma non ha permesso KV** (verificato: errore 1
 | 22 | Barra composer proporzioni/liquid glass | 🟡 rifinita, manca pass "assurdo" completo |
 | — | Sidebar stile Claude (recency, gruppi data, rename, no-overlay new chat) | ✅ Fase 4 |
 | 2 | Sidebar + pannello Artifact "identici a Claude Desktop" | 🟡 sidebar fatta; pannello artifact da rivedere |
-| 4 | Upload file/immagini nella barra | 🔴 da fare |
+| 4 | Upload file/immagini nella barra | ✅ Fase 4 (allega → vision /api/see) |
 | 7 | Animazione di ogni icona (triggerabile) | ✅ AnimatedIcon |
 | 6 | Transizioni entrata→uscita modalità | 🟡 presenti, da curare |
 | 20 | Jump-to-bottom liquid glass | ✅ |
