@@ -199,9 +199,9 @@ function Chat() {
 
   // Salva/aggiorna il foglio OnlyType tra le conversazioni.
   const persistSheet = useCallback((s: SheetSession) => {
-    const hasContent = !!s.image || s.texts.some((t) => t.value.trim());
+    const hasContent = !!s.image || s.texts.some((t) => t.value.trim()) || !!s.chat?.length;
     if (!hasContent && !sheetIdRef.current) return; // foglio vuoto: non creare nulla
-    const firstText = s.texts.find((t) => t.value.trim())?.value;
+    const firstText = s.texts.find((t) => t.value.trim())?.value || s.chat?.find((m) => m.role === "user" && m.content)?.content;
     const title = titleFrom(firstText || "Foglio OnlyType");
     setChats((prev) => {
       let id = sheetIdRef.current;
@@ -642,6 +642,7 @@ function Chat() {
                 session={sheetHydra.session}
                 onPersist={persistSheet}
                 onExit={() => setMode("chat")}
+                onOpenArtifact={openArtifact}
               />
             </div>
           </main>

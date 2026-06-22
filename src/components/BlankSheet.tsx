@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { seeSheet } from "../lib/api";
-import { renderMarkdown } from "../lib/markdown";
-import { parseSegments } from "../lib/artifacts";
-import Artifact from "./Artifact";
-import { ShiningText } from "./ShiningText";
-import { WLoader } from "./WLoader";
+import ChatMessage, { type Message } from "./ChatMessage";
+
+let sheetMsgId = 0;
+const smid = () => `sm${++sheetMsgId}_${Date.now().toString(36)}`;
 
 /**
  * BlankSheet — la modalità OnlyType: il DISEGNO è il prompt. Disegni/scrivi su un
@@ -26,19 +25,21 @@ interface TextNode {
   color: string;
 }
 
-// Sessione serializzabile del foglio: disegno (dataURL) + testi. Vive tra le conversazioni.
+// Sessione serializzabile del foglio: disegno (dataURL) + testi + la chat. Vive tra le conversazioni.
 export interface SheetSession {
   image: string | null;
   texts: TextNode[];
+  chat?: Message[]; // la conversazione di OnlyType (continuabile)
 }
 
 interface Props {
   session?: SheetSession;
   onPersist?: (s: SheetSession) => void;
   onExit?: () => void;
+  onOpenArtifact?: (title: string, html: string) => void; // artifact nel pannello laterale
 }
 
-export default function BlankSheet({ session, onPersist, onExit }: Props) {
+export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
@@ -50,13 +51,17 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
   const [texts, setTexts] = useState<TextNode[]>(session?.texts ?? []);
   const nextId = useRef((session?.texts?.reduce((m, t) => Math.max(m, t.id), 0) ?? 0) + 1);
 
-  // OnlyType: il disegno → creazione
+  // OnlyType: il disegno → creazione, ora come CHAT continuabile
   const [hasInk, setHasInk] = useState(!!session?.image);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(!!session?.chat?.length);
   const [prompt, setPrompt] = useState("");
-  const [result, setResult] = useState("");
+  const [thread, setThread] = useState<Message[]>(session?.chat ?? []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const lastImgRef = useRef<string | null>(session?.image ?? null); // ultimo snapshot, per i follow-up
+  const threadRef = useRef(thread);
+  threadRef.current = thread;
+  const scrollDownRef = useRef<HTMLDivElement>(null);
 
   // mirror dei testi per leggerli aggiornati dentro il timer di salvataggio
   const textsRef = useRef(texts);
@@ -74,7 +79,9 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
       } catch {
         image = null;
       }
-      onPersist({ image, texts: textsRef.current });
+      // la chat persiste senza i dataURL delle immagini (pesanti per localStorage)
+      const chat = threadRef.current.map(({ id, role, content }) => ({ id, role, content })) as Message[];
+      onPersist({ image, texts: textsRef.current, chat });
     }, 700);
   };
 
@@ -185,7 +192,6 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
     setTexts([]);
     setHasInk(false);
-    setResult("");
     setErr("");
     schedulePersist();
   };
@@ -220,34 +226,55 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
     }
   };
 
-  // il cuore di OnlyType: WhyChat guarda il disegno e CREA ciò che rappresenta
-  const create = async () => {
+  // il cuore di OnlyType: una CHAT continuabile. Ogni turno WhyChat ri-guarda il
+  // disegno (snapshot aggiornato) E ricorda la conversazione precedente. Così puoi
+  // dire "rendilo blu", "aggiungi un bottone", "e ora fanne un gioco"… senza ripartire.
+  const send = async (text: string) => {
     if (busy) return;
-    const img = snapshot();
-    if (!img || !hasInk) {
-      setErr("Disegna o scrivi qualcosa sul foglio, poi premi Crea.");
+    const fresh = hasInk ? snapshot() : null;
+    const img = fresh ?? lastImgRef.current; // follow-up: riusa l'ultimo disegno se non ridisegni
+    if (!img && !text.trim()) {
+      setErr("Disegna o scrivi qualcosa sul foglio, poi invia.");
       return;
     }
+    if (img) lastImgRef.current = img;
     setErr("");
+    setPrompt("");
     setBusy(true);
-    setResult("");
-    setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio al risultato
+    setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio alla chat
+
+    const history = threadRef.current.map((m) => ({ role: m.role, content: m.content }));
+    const userMsg: Message = {
+      id: smid(),
+      role: "user",
+      content: text.trim(),
+      ...(fresh ? { image: fresh } : {}),
+    };
+    const aiMsg: Message = { id: smid(), role: "assistant", content: "", streaming: true };
+    setThread((t) => [...t, userMsg, aiMsg]);
+    requestAnimationFrame(() => scrollDownRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+
     let acc = "";
+    const patch = (done = false) =>
+      setThread((t) => t.map((m) => (m.id === aiMsg.id ? { ...m, content: acc, streaming: !done } : m)));
     try {
       await seeSheet(
-        img,
-        prompt.trim() || "Guarda il disegno e crea ciò che rappresenta.",
-        [],
+        img ?? "",
+        text.trim() || "Guarda il disegno e crea ciò che rappresenta.",
+        history,
         (d) => {
           acc += d;
-          setResult(acc);
+          patch();
         },
       );
-      if (!acc.trim()) setResult("Non sono riuscito a leggere il disegno. Riprova con un tratto più netto.");
+      if (!acc.trim()) acc = "Non sono riuscito a leggere il disegno. Riprova con un tratto più netto.";
+      patch(true);
     } catch (e) {
-      setErr(`⚠ ${(e as Error).message}`);
+      acc = acc || `⚠ ${(e as Error).message}`;
+      patch(true);
     } finally {
       setBusy(false);
+      schedulePersist();
     }
   };
 
@@ -425,49 +452,45 @@ export default function BlankSheet({ session, onPersist, onExit }: Props) {
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              create();
+              send(prompt);
             }
           }}
           disabled={busy}
-          placeholder="Descrivi il disegno (opzionale) — es. 'fanne un sito', 'risolvi'"
+          placeholder={
+            thread.length
+              ? "Continua… es. 'rendilo blu', 'aggiungi un bottone', 'ora fanne un gioco'"
+              : "Descrivi il disegno (opzionale) — es. 'fanne un sito', 'risolvi'"
+          }
           className="glass min-w-0 flex-1 rounded-full bg-transparent px-4 py-2.5 text-[0.88rem] text-paper placeholder:text-faint focus:outline-none"
         />
         <button
-          onClick={create}
-          disabled={busy || !hasInk}
+          onClick={() => send(prompt)}
+          disabled={busy || (!hasInk && thread.length === 0)}
           className="mono flex shrink-0 items-center gap-1.5 rounded-full bg-[radial-gradient(125%_120%_at_50%_6%,#ffd2a4,#f0a36a_24%,#d4582c_56%,#8a2f17_100%)] px-4 py-2.5 text-[0.6rem] text-[#0a0908] transition disabled:opacity-35"
           title="WhyChat guarda il disegno e lo crea"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          CREA
+          {thread.length ? "INVIA" : "CREA"}
         </button>
       </div>
 
-      {/* risultato: WhyChat descrive a parole il disegno e costruisce */}
-      {(busy || result || err) && (
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.5)] p-4">
-          {busy && !result ? (
-            <div className="flex items-center gap-2 text-ember">
-              <WLoader size={20} />
-              <ShiningText text="Guardo il disegno e creo…" className="text-[0.92rem]" />
-            </div>
-          ) : err ? (
-            <p className="text-[0.85rem] text-signal-soft">{err}</p>
-          ) : (
-            parseSegments(result).map((seg, i) =>
-              seg.type === "artifact" ? (
-                <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} />
-              ) : (
-                <div
-                  key={i}
-                  className="wc-prose text-[0.92rem] leading-[1.7] text-dim"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.text) }}
-                />
-              ),
-            )
-          )}
+      {/* la CHAT di OnlyType: continuabile, con artifact resi bene (e pannello laterale) */}
+      {(thread.length > 0 || err) && (
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.5)] py-3">
+          <div className="flex flex-col gap-5">
+            {thread.map((m, i) => (
+              <ChatMessage
+                key={m.id}
+                msg={m}
+                prompt={thread[i - 1]?.role === "user" ? thread[i - 1].content : ""}
+                onOpenArtifact={onOpenArtifact}
+              />
+            ))}
+          </div>
+          {err && <p className="px-4 pt-2 text-[0.85rem] text-signal-soft">{err}</p>}
+          <div ref={scrollDownRef} className="h-1" />
         </div>
       )}
     </div>
