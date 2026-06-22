@@ -412,13 +412,22 @@ function Chat() {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
 
-        // PLAN MODE: prima pianifica (timeline agente stile Claude Code), poi rispondi
+        // PLAN MODE: prima pianifica (timeline agente stile Claude Code), poi
+        // rispondi. I passi avanzano col VERO progredire della risposta (non un
+        // timer a caso): più la risposta cresce, più passi si completano.
         const usePlan = planRef.current && ["chat", "canvas", "learn"].includes(useMode);
-        let planTimer: ReturnType<typeof setInterval> | null = null;
+        let planLen = 0;
+        const setPlanActive = (n: number) =>
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === id ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, planActive: n } : m)) } : c,
+            ),
+          );
         if (usePlan) {
           try {
             const steps = await planSteps(history, text);
             if (steps.length) {
+              planLen = steps.length;
               setChats((prev) =>
                 prev.map((c) =>
                   c.id === id
@@ -426,21 +435,6 @@ function Chat() {
                     : c,
                 ),
               );
-              let activeStep = 0;
-              planTimer = setInterval(() => {
-                activeStep += 1;
-                setChats((prev) =>
-                  prev.map((c) =>
-                    c.id === id
-                      ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, planActive: activeStep } : m)) }
-                      : c,
-                  ),
-                );
-                if (activeStep >= steps.length && planTimer) {
-                  clearInterval(planTimer);
-                  planTimer = null;
-                }
-              }, 650);
             }
           } catch {
             /* il piano è opzionale: se fallisce, si risponde dritti */
@@ -448,18 +442,27 @@ function Chat() {
         }
 
         let acc = "";
+        let lastStep = 0;
+        const STEP_CHARS = 110; // ~un passo ogni 110 caratteri di risposta reale
         await streamChat(
           history,
           (delta) => {
             acc += delta;
             patch(acc);
+            if (planLen) {
+              const step = Math.min(planLen - 1, Math.floor(acc.length / STEP_CHARS));
+              if (step !== lastStep) {
+                lastStep = step;
+                setPlanActive(step);
+              }
+            }
           },
           ctrl.signal,
           useMode,
           model,
           webSearch,
         );
-        if (planTimer) clearInterval(planTimer);
+        if (planLen) setPlanActive(planLen); // a risposta finita: tutti i passi fatti
         patch(acc, true);
         if (autoTtsRef.current) speak(acc);
       }
