@@ -219,7 +219,7 @@ function Chat() {
     if (sheetIdRef.current) setActiveId(sheetIdRef.current);
   }, []);
 
-  const send = async (text: string, attach?: Attachment, modeOverride?: Mode) => {
+  const send = async (text: string, attachments?: Attachment[], modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
     const existing = chats.find((c) => c.id === activeId);
@@ -228,20 +228,22 @@ function Chat() {
     // un'apertura (modeOverride) o una chat nuova usano la modalità scelta ora.
     const useMode: Mode = modeOverride ?? (existing ? existing.mode ?? "chat" : mode);
     if (useMode !== mode) setMode(useMode);
-    const image = attach?.image; // immagine o frame del video → vision
-    // contenuto inviato al modello: per i file di testo includo il contenuto;
-    // per i binari un nota; ciò che si VEDE nel bubble resta pulito (chip).
-    const sentContent = attach?.text
-      ? `${text}\n\n[Contenuto del file "${attach.name}"]:\n${attach.text}`
-      : attach && attach.kind === "file"
-        ? `${text}\n\n[Allegato: ${attach.name}]`
-        : text;
+
+    const atts = attachments ?? [];
+    const images = atts.map((a) => a.image).filter((x): x is string => !!x); // immagini + frame video → vision
+    // contenuto inviato al modello: testo + contenuto dei file di testo + note dei file
+    const textParts = atts.filter((a) => a.text).map((a) => `[Contenuto del file "${a.name}"]:\n${a.text}`);
+    const noteParts = atts
+      .filter((a) => !a.image && !a.text)
+      .map((a) => `[Allegato: ${a.name}${a.kind === "video" ? " (video)" : ""}]`);
+    const sentContent = [text, ...textParts, ...noteParts].filter(Boolean).join("\n\n");
+    // ciò che si VEDE nel bubble: le anteprime (immagini/frame/file), pulite
+    const dispAtts = atts.map((a) => ({ image: a.image, name: a.name, kind: a.kind }));
     const userMsg: Message = {
       id: uid(),
       role: "user",
       content: text,
-      ...(image ? { image } : {}),
-      ...(attach && !image ? { file: { name: attach.name, kind: attach.kind } } : {}),
+      ...(dispAtts.length ? { attachments: dispAtts } : {}),
     };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
@@ -254,7 +256,7 @@ function Chat() {
       );
     } else {
       id = newChatId();
-      nextChats = [{ id, title: titleFrom(text || attach?.name || "Allegato"), ts: Date.now(), mode: useMode, messages: [userMsg, aiMsg] }, ...chats];
+      nextChats = [{ id, title: titleFrom(text || atts[0]?.name || "Allegato"), ts: Date.now(), mode: useMode, messages: [userMsg, aiMsg] }, ...chats];
     }
     setChats(nextChats);
     saveChats(nextChats);
@@ -279,14 +281,17 @@ function Chat() {
       );
 
     try {
-      if (image) {
-        // C'è un'immagine: WhyChat la GUARDA (vision /api/see) e risponde/crea.
+      if (images.length) {
+        // Ci sono immagini (anche più, e/o frame video): WhyChat le GUARDA (vision).
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         let acc = "";
+        const visionPrompt =
+          [text, ...textParts].filter(Boolean).join("\n\n") ||
+          "Guarda" + (images.length > 1 ? " queste immagini" : " questa immagine") + " e aiutami: descrivi, spiega o crea ciò che serve.";
         await seeSheet(
-          image,
-          text || "Guarda questa immagine e aiutami: descrivi, spiega o crea ciò che serve.",
+          images,
+          visionPrompt,
           baseMessages.map((m) => ({ role: m.role, content: m.content })),
           (d) => {
             acc += d;

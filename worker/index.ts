@@ -755,18 +755,25 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
 // stesso pattern SSE delle altre risposte Gemini, ma con l'immagine nel contesto.
 async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
-  let body: { image?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown };
+  let body: { image?: unknown; images?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: "JSON non valido" }, 400, cors);
   }
 
-  const dataUrl = String(body.image ?? "");
-  const m = /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(dataUrl);
-  if (!m) return json({ error: "immagine non valida" }, 400, cors);
-  const mimeType = m[1];
-  const data = m[2].slice(0, 5_000_000); // guard payload
+  // accetta UNA immagine (image) o PIÙ immagini (images[]) — multi-file
+  const rawImages: string[] = Array.isArray(body.images)
+    ? (body.images as unknown[]).map(String)
+    : body.image
+      ? [String(body.image)]
+      : [];
+  const imageParts = rawImages
+    .map((u) => /^data:(image\/[a-z.+-]+);base64,(.+)$/i.exec(u))
+    .filter((x): x is RegExpExecArray => !!x)
+    .slice(0, 6)
+    .map((x) => ({ inlineData: { mimeType: x[1], data: x[2].slice(0, 5_000_000) } }));
+  if (!imageParts.length) return json({ error: "immagine non valida" }, 400, cors);
   const prompt = String(body.prompt ?? "").slice(0, MAX_MESSAGE_CHARS) || "Guarda il mio foglio e dimmi cosa vedi.";
   const name = String(body.name ?? "").slice(0, 80);
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
@@ -776,7 +783,7 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
     role: mm.role === "assistant" ? "model" : "user",
     parts: [{ text: mm.content }],
   }));
-  contents.push({ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType, data } }] });
+  contents.push({ role: "user", parts: [{ text: prompt }, ...imageParts] });
 
   const systemText =
     SOUL + BEHAVIOR + nowContext() +

@@ -1,0 +1,21 @@
+// One-off: verifica allegati MULTIPLI (immagini + file) con anteprime, niente scritta.
+import { chromium } from "playwright";
+import { writeFileSync } from "fs";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const URL = "http://localhost:4173/whychat/";
+writeFileSync("/tmp/mf-note.txt", "Questo è un file di testo di prova per WhyChat.");
+const b = await chromium.launch({ executablePath: CHROME }).catch(() => chromium.launch({ channel: "chrome" }));
+const ctx = await b.newContext({ viewport: { width: 1280, height: 820 }, deviceScaleFactor: 2 });
+const p = await ctx.newPage();
+await p.goto(URL, { waitUntil: "networkidle" });
+await p.waitForTimeout(700);
+await p.screenshot({ path: "/tmp/mf-img1.png", clip: { x: 200, y: 100, width: 300, height: 200 } });
+await p.screenshot({ path: "/tmp/mf-img2.png", clip: { x: 500, y: 300, width: 300, height: 200 } });
+const ta = await p.$("textarea");
+await ta.click();
+await p.keyboard.type("Guarda questi");
+await p.setInputFiles('input[type="file"]', ["/tmp/mf-img1.png", "/tmp/mf-img2.png", "/tmp/mf-note.txt"]);
+await p.waitForTimeout(1000);
+await p.screenshot({ path: "/tmp/wc-multifile.png", clip: { x: 300, y: 470, width: 680, height: 320 } });
+await b.close();
+console.log("✓ shot → /tmp/wc-multifile.png");
