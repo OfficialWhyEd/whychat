@@ -94,8 +94,17 @@ const itemV = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.16, ease: EASE_IN } },
 };
 
+// Un allegato generico: ogni tipo di file. Per immagini e video portiamo un
+// fotogramma (image dataURL) al vision; per file di testo/codice il contenuto.
+export interface Attachment {
+  name: string;
+  kind: "image" | "video" | "text" | "file";
+  image?: string; // dataURL per la vista (immagine o frame del video) → vision
+  text?: string; // contenuto testuale (txt/md/csv/json/codice)
+}
+
 interface Props {
-  onSend: (text: string, image?: string) => void;
+  onSend: (text: string, attach?: Attachment) => void;
   disabled: boolean;
   mode: Mode;
   onMode: (m: Mode) => void;
@@ -122,35 +131,71 @@ function looksComplex(t: string): boolean {
 export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan }: Props) {
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
-  const [image, setImage] = useState<string | null>(null); // immagine allegata (dataURL)
+  const [attach, setAttach] = useState<Attachment | null>(null); // allegato (ogni tipo di file)
   const ref = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const reduce = useReducedMotion();
-  // "Armato": c'è testo o un'immagine pronti da inviare. Il primario si accende.
-  const armed = (value.trim().length > 0 || !!image) && !disabled;
+  // "Armato": c'è testo o un allegato pronti da inviare. Il primario si accende.
+  const armed = (value.trim().length > 0 || !!attach) && !disabled;
 
-  // Legge il file scelto come dataURL (compatto: lo ridimensiona a max 1280px).
+  // ridimensiona un'immagine (Image/canvas) a max 1280px → dataURL jpeg compatto
+  const downscale = (img: HTMLImageElement | HTMLVideoElement, w: number, h: number): string => {
+    const max = 1280;
+    const scale = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.round(w * scale);
+    c.height = Math.round(h * scale);
+    c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.85);
+  };
+
+  const isTextLike = (mime: string, name: string) =>
+    mime.startsWith("text/") ||
+    /(json|javascript|typescript|xml|csv|html|css|markdown|x-sh|x-python)/.test(mime) ||
+    /\.(txt|md|markdown|csv|json|js|jsx|ts|tsx|py|rb|go|rs|java|c|cpp|h|css|scss|html|xml|yml|yaml|toml|ini|sh|sql|log)$/i.test(name);
+
+  // Importa QUALSIASI file. Immagini→frame; video→un fotogramma (stile ffmpeg);
+  // testo/codice→contenuto; altri→chip col nome (l'AI sa che c'è).
   const onFile = (file: File | null | undefined) => {
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = String(reader.result);
-      const img = new Image();
-      img.onload = () => {
-        const max = 1280;
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
-        setImage(c.toDataURL("image/jpeg", 0.85));
+    if (!file) return;
+    const mime = file.type || "";
+    const name = file.name || "file";
+    if (mime.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => setAttach({ name, kind: "image", image: downscale(img, img.width, img.height) });
+        img.onerror = () => setAttach({ name, kind: "image", image: String(reader.result) });
+        img.src = String(reader.result);
       };
-      img.onerror = () => setImage(src);
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    } else if (mime.startsWith("video/")) {
+      // estrai un fotogramma rappresentativo (come ffmpeg) → vision lo "vede"
+      const url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.muted = true;
+      v.src = url;
+      v.onloadeddata = () => {
+        v.currentTime = Math.min(1, (v.duration || 2) / 2);
+      };
+      v.onseeked = () => {
+        const frame = downscale(v, v.videoWidth, v.videoHeight);
+        URL.revokeObjectURL(url);
+        setAttach({ name, kind: "video", image: frame });
+      };
+      v.onerror = () => {
+        URL.revokeObjectURL(url);
+        setAttach({ name, kind: "file" });
+      };
+    } else if (isTextLike(mime, name)) {
+      const reader = new FileReader();
+      reader.onload = () => setAttach({ name, kind: "text", text: String(reader.result).slice(0, 12000) });
+      reader.readAsText(file);
+    } else {
+      setAttach({ name, kind: "file" });
+    }
   };
   // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
   const suggestPlan = !plan && !!onTogglePlan && PLANNABLE.includes(mode) && looksComplex(value);
@@ -184,10 +229,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
   const submit = () => {
     const t = value.trim();
-    if ((!t && !image) || disabled) return;
-    onSend(t, image ?? undefined);
+    if ((!t && !attach) || disabled) return;
+    onSend(t, attach ?? undefined);
     setValue("");
-    setImage(null);
+    setAttach(null);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -307,9 +352,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             : "ring-transparent focus-within:ring-signal/25 focus-within:shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_26px_-10px_rgba(201,75,37,0.42)]"
         }`}
       >
-        {/* preview dell'immagine allegata (sopra il testo, mai sovrapposta) */}
+        {/* preview dell'allegato (sopra il testo, mai sovrapposta) */}
         <AnimatePresence>
-          {image && (
+          {attach && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -318,10 +363,25 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               className="mb-1.5 flex items-center gap-2 px-0.5"
             >
               <div className="relative">
-                <img src={image} alt="allegato" className="h-14 w-14 rounded-xl border border-[var(--color-line2)] object-cover" />
+                {attach.image ? (
+                  <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[var(--color-line2)]">
+                    <img src={attach.image} alt={attach.name} className="h-full w-full object-cover" />
+                    {attach.kind === "video" && (
+                      <span className="absolute inset-0 grid place-items-center bg-black/30 text-paper">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid h-14 w-14 place-items-center rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.03)] text-faint">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                )}
                 <button
                   onClick={() => {
-                    setImage(null);
+                    setAttach(null);
                     if (fileRef.current) fileRef.current.value = "";
                   }}
                   title="Rimuovi"
@@ -332,7 +392,16 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                   </svg>
                 </button>
               </div>
-              <span className="mono text-[0.55rem] text-faint">immagine pronta — WhyChat la vede</span>
+              <span className="mono min-w-0 flex-1 truncate text-[0.55rem] text-faint">
+                {attach.name} ·{" "}
+                {attach.kind === "image"
+                  ? "WhyChat la vede"
+                  : attach.kind === "video"
+                    ? "frame letto dal video"
+                    : attach.kind === "text"
+                      ? "contenuto allegato"
+                      : "file allegato"}
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -363,24 +432,27 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           />
         </div>
 
-        {/* riga 2 — i controlli. Il send resta SOLIDO a destra (mai a capo): i
-            tasti a sinistra scorrono in orizzontale su mobile invece di wrappare. */}
+        {/* riga 2 — i controlli. Tutto SOLIDO: niente va a capo, niente si nasconde.
+            Su mobile i toggle sono solo-icona (le scritte appaiono da sm in su) così
+            modalità + allega + cerca + piano + invio stanno tutti in riga. */}
         <div className="mt-2 flex items-center gap-2">
-          <div className="scroll-none flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
           {/* modalità → apre la palette */}
           <motion.button
             onClick={() => setMenu((s) => !s)}
             title="Scegli modalità"
             whileTap={{ scale: 0.96 }}
             transition={{ type: "spring", stiffness: 420, damping: 16 }}
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[0.66rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
+            className={`flex h-9 min-w-0 items-center gap-1.5 rounded-full border px-2.5 text-[0.66rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
               mode === "chat"
                 ? "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
                 : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]"
             }`}
           >
-            <AnimatedIcon className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</AnimatedIcon>
-            <span className="mono whitespace-nowrap">{mode === "chat" ? "MODALITÀ" : current.label}</span>
+            <span className="shrink-0">
+              <AnimatedIcon className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</AnimatedIcon>
+            </span>
+            <span className="mono truncate">{mode === "chat" ? "MODALITÀ" : current.label}</span>
             <motion.svg
               width="10" height="10" viewBox="0 0 24 24" fill="none" className="opacity-60"
               animate={{ rotate: menu ? 180 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 22 }}
@@ -389,27 +461,25 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             </motion.svg>
           </motion.button>
 
-          {/* tasto: allega immagine → WhyChat la VEDE (vision /api/see) */}
+          {/* tasto: allega QUALSIASI file (graffetta). Immagini/video → vision, testo → contenuto */}
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0])}
           />
           <motion.button
             type="button"
             onClick={() => fileRef.current?.click()}
-            title="Allega un'immagine"
+            title="Allega un file (immagini, video, testo, qualsiasi)"
             whileTap={{ scale: 0.93 }}
             transition={{ type: "spring", stiffness: 420, damping: 16 }}
             className={`flex h-9 shrink-0 items-center justify-center rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
-              image ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
+              attach ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
             }`}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M21 15l-5-5L5 21M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="9" cy="9" r="2" />
+              <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </motion.button>
 
@@ -438,7 +508,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     animate={{ width: "auto", opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
+                    className="mono hidden overflow-hidden whitespace-nowrap text-[0.62rem] sm:inline-block"
                   >
                     CERCA
                   </motion.span>
@@ -471,7 +541,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     animate={{ width: "auto", opacity: 1 }}
                     exit={{ width: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="mono overflow-hidden whitespace-nowrap text-[0.62rem]"
+                    className="mono hidden overflow-hidden whitespace-nowrap text-[0.62rem] sm:inline-block"
                   >
                     PIANO
                   </motion.span>
@@ -493,7 +563,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           ) : (
             <OriginButton
               onClick={submit}
-              disabled={disabled || (!value.trim() && !image)}
+              disabled={disabled || (!value.trim() && !attach)}
               title="Invia"
               fill="rgba(255,228,198,0.42)"
               fillText="#0a0908"

@@ -8,7 +8,7 @@ import WhyEntropy from "./components/WhyEntropy";
 import WhyMusic from "./components/WhyMusic";
 import WhyEcosystem from "./components/WhyEcosystem";
 import AnimatedTextCycle from "./components/AnimatedTextCycle";
-import CommandComposer, { MODES, type Mode } from "./components/CommandComposer";
+import CommandComposer, { MODES, type Mode, type Attachment } from "./components/CommandComposer";
 import BlankSheet, { type SheetSession } from "./components/BlankSheet";
 import ModelSelector, { modelName } from "./components/ModelSelector";
 import { motion, AnimatePresence } from "framer-motion";
@@ -219,7 +219,7 @@ function Chat() {
     if (sheetIdRef.current) setActiveId(sheetIdRef.current);
   }, []);
 
-  const send = async (text: string, image?: string, modeOverride?: Mode) => {
+  const send = async (text: string, attach?: Attachment, modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
     const existing = chats.find((c) => c.id === activeId);
@@ -228,7 +228,21 @@ function Chat() {
     // un'apertura (modeOverride) o una chat nuova usano la modalità scelta ora.
     const useMode: Mode = modeOverride ?? (existing ? existing.mode ?? "chat" : mode);
     if (useMode !== mode) setMode(useMode);
-    const userMsg: Message = { id: uid(), role: "user", content: text, ...(image ? { image } : {}) };
+    const image = attach?.image; // immagine o frame del video → vision
+    // contenuto inviato al modello: per i file di testo includo il contenuto;
+    // per i binari un nota; ciò che si VEDE nel bubble resta pulito (chip).
+    const sentContent = attach?.text
+      ? `${text}\n\n[Contenuto del file "${attach.name}"]:\n${attach.text}`
+      : attach && attach.kind === "file"
+        ? `${text}\n\n[Allegato: ${attach.name}]`
+        : text;
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: text,
+      ...(image ? { image } : {}),
+      ...(attach && !image ? { file: { name: attach.name, kind: attach.kind } } : {}),
+    };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
     const baseMessages = existing?.messages ?? [];
@@ -240,7 +254,7 @@ function Chat() {
       );
     } else {
       id = newChatId();
-      nextChats = [{ id, title: titleFrom(text), ts: Date.now(), mode: useMode, messages: [userMsg, aiMsg] }, ...chats];
+      nextChats = [{ id, title: titleFrom(text || attach?.name || "Allegato"), ts: Date.now(), mode: useMode, messages: [userMsg, aiMsg] }, ...chats];
     }
     setChats(nextChats);
     saveChats(nextChats);
@@ -250,7 +264,10 @@ function Chat() {
     setAtBottom(true);
     requestAnimationFrame(() => scrollToBottom("smooth"));
 
-    const history: ApiMsg[] = [...baseMessages, userMsg].map((m) => ({ role: m.role, content: m.content }));
+    const history: ApiMsg[] = [
+      ...baseMessages.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: sentContent },
+    ];
 
     const patch = (content: string, done = false) =>
       setChats((prev) =>
