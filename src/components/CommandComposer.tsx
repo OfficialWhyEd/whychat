@@ -184,8 +184,54 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
     /(json|javascript|typescript|xml|csv|html|css|markdown|x-sh|x-python)/.test(mime) ||
     /\.(txt|md|markdown|csv|json|js|jsx|ts|tsx|py|rb|go|rs|java|c|cpp|h|css|scss|html|xml|yml|yaml|toml|ini|sh|sql|log)$/i.test(name);
 
+  const isImageExt = (ext: string) => /^(png|jpg|jpeg|gif|webp|bmp)$/i.test(ext);
+  const imgDataURL = (img: HTMLImageElement, fallback: string) =>
+    img.width ? downscale(img, img.width, img.height) : fallback;
+
+  // ZIP: lo SPACCHETTA (JSZip, lazy) e aggiunge i file leggibili dentro come
+  // allegati singoli, così WhyChat ne legge il contenuto e ne capisce il contesto.
+  const onZip = async (file: File) => {
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(file);
+      const entries = Object.values(zip.files).filter((e) => !e.dir);
+      let count = 0;
+      for (const e of entries) {
+        if (count >= 18) break;
+        const ename = e.name;
+        if (/__MACOSX|\.DS_Store|\/$/.test(ename)) continue;
+        const ext = (ename.split(".").pop() || "").toLowerCase();
+        if (isImageExt(ext)) {
+          const b64 = await e.async("base64");
+          const mime = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "webp" ? "image/webp" : "image/jpeg";
+          const dataUrl = `data:${mime};base64,${b64}`;
+          const img = new Image();
+          await new Promise<void>((res) => {
+            img.onload = () => res();
+            img.onerror = () => res();
+            img.src = dataUrl;
+          });
+          const d = imgDataURL(img, dataUrl);
+          addAttach({ id: aid(), name: ename, kind: "image", image: d, data: d });
+          count++;
+        } else if (ext === "pdf") {
+          const b64 = await e.async("base64");
+          addAttach({ id: aid(), name: ename, kind: "file", data: `data:application/pdf;base64,${b64}` });
+          count++;
+        } else if (isTextLike("", ename)) {
+          const txt = await e.async("string");
+          addAttach({ id: aid(), name: ename, kind: "text", text: txt.slice(0, 12000) });
+          count++;
+        }
+      }
+      if (count === 0) addAttach({ id: aid(), name: file.name, kind: "file" }); // zip senza file leggibili
+    } catch {
+      addAttach({ id: aid(), name: file.name || "archivio.zip", kind: "file" });
+    }
+  };
+
   // Importa QUALSIASI file (anche più insieme). Immagini→frame; video→anteprima
-  // playabile + un fotogramma per il vision; testo/codice→contenuto; altri→chip.
+  // playabile + un fotogramma per il vision; testo/codice→contenuto; ZIP→spacchettato; altri→chip.
   const onFiles = (files: FileList | null | undefined) => {
     if (!files) return;
     for (const file of Array.from(files)) {
@@ -236,6 +282,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         const reader = new FileReader();
         reader.onload = () => addAttach({ id, name, kind: "file", data: String(reader.result) });
         reader.readAsDataURL(file);
+      } else if (mime.includes("zip") || /\.zip$/i.test(name)) {
+        // ZIP: spacchetta e aggiunge i file dentro (async)
+        void onZip(file);
       } else if (isTextLike(mime, name)) {
         const reader = new FileReader();
         reader.onload = () => addAttach({ id, name, kind: "text", text: String(reader.result).slice(0, 12000) });

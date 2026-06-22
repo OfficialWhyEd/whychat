@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const b = await chromium.launch({ executablePath: CHROME }).catch(() => chromium.launch({ channel: "chrome" }));
+const ctx = await b.newContext({ viewport:{width:1280,height:820}, deviceScaleFactor:2 });
+const p = await ctx.newPage();
+await p.goto("http://localhost:4173/whychat/",{waitUntil:"networkidle"});
+await p.waitForTimeout(700);
+await (await p.$("textarea")).click(); await p.keyboard.type("Spacchetta lo zip");
+await p.setInputFiles('input[type="file"]', ["/tmp/test-archive.zip"]);
+await p.waitForTimeout(1500);
+await p.screenshot({ path:"/tmp/wc-zip.png", clip:{x:300,y:540,width:700,height:250} });
+await b.close(); console.log("ok");
