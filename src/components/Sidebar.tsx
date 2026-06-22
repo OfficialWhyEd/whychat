@@ -66,16 +66,16 @@ export default function Sidebar({
 
   return (
     <>
-      {/* scrim mobile */}
+      {/* scrim mobile — sfuma con lo stesso ritmo del pannello */}
       <div
         onClick={onClose}
-        className={`fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] transition-opacity md:hidden ${
+        className={`fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
 
       <aside
-        className={`fixed z-40 flex h-full flex-col border-[var(--color-line)] bg-[rgba(16,13,11,0.72)] backdrop-blur-xl transition-[transform,width] duration-300 md:static md:z-10 ${
+        className={`fixed z-40 flex h-full flex-col border-[var(--color-line)] bg-[rgba(16,13,11,0.72)] backdrop-blur-xl transition-[transform,width] duration-[360ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:static md:z-10 ${
           open
             ? "w-[268px] translate-x-0 border-r"
             : "w-[268px] -translate-x-full border-r md:w-0 md:translate-x-0 md:overflow-hidden md:border-r-0"
