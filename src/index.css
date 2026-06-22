@@ -100,6 +100,15 @@ body {
   background: transparent;
 }
 
+/* scrollbar nascosta (toolbar che scorre in orizzontale, senza barra visibile) */
+.scroll-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─── Liquid glass ─────────────────────────────────────────────────────── */
 .glass {
   background: linear-gradient(
