@@ -8,6 +8,7 @@ import { ShiningText } from "./ShiningText";
 import { WLoader } from "./WLoader";
 import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
 import { AgentPlanning, type PlanStep, type PlanStepStatus } from "./AgentPlanning";
+import { FileCard, formatOf } from "./ui/file-card-collections";
 import type { PlanStepData } from "../lib/api";
 
 // tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
@@ -192,14 +193,8 @@ export default function ChatMessage({
                     className="h-20 w-20 rounded-xl border border-[var(--color-line2)] object-cover"
                   />
                 ) : (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.04)] px-3 py-2"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-faint">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="mono max-w-[140px] truncate text-[0.6rem] text-dim">{a.name}</span>
+                  <div key={i} className="grid place-items-center px-1.5" title={a.name}>
+                    <FileCard formatFile={formatOf(a.name)} />
                   </div>
                 ),
               )}

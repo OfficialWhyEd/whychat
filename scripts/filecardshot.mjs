@@ -1,0 +1,14 @@
+import { chromium } from "playwright";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const b = await chromium.launch({ executablePath: CHROME }).catch(() => chromium.launch({ channel: "chrome" }));
+const ctx = await b.newContext({ viewport: { width: 1280, height: 820 }, deviceScaleFactor: 2 });
+const p = await ctx.newPage();
+await p.goto("http://localhost:4173/whychat/", { waitUntil: "networkidle" });
+await p.waitForTimeout(700);
+await (await p.$("textarea")).click();
+await p.keyboard.type("File cards");
+await p.setInputFiles('input[type="file"]', ["/tmp/pv.pdf","/tmp/pv.md","/tmp/pv.csv","/tmp/pv.zip","/tmp/pv.json","/tmp/pv.js"]);
+await p.waitForTimeout(1000);
+await p.screenshot({ path: "/tmp/wc-filecards.png", clip: { x: 300, y: 450, width: 680, height: 340 } });
+await b.close();
+console.log("ok");
