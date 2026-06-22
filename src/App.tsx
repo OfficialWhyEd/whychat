@@ -381,18 +381,28 @@ function Chat() {
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebar(false);
   };
   const newChat = () => {
-    if (streaming) return;
+    // "Nuova conversazione" deve SEMPRE aprire una chat vuota — anche durante lo
+    // streaming (lo interrompiamo) — e tornare in modalità chat pulita. Niente
+    // overlay residui: su mobile il pannello si chiude e resti sul foglio bianco.
+    abortRef.current?.abort();
     setActiveId(null);
-    if (mode === "group") {
-      groupIdRef.current = null;
-      setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
-    }
-    if (mode === "sheet") {
-      sheetIdRef.current = null;
-      setSheetHydra((h) => ({ key: h.key + 1, session: undefined }));
-    }
+    groupIdRef.current = null;
+    sheetIdRef.current = null;
+    setGroupHydra((h) => ({ key: h.key + 1, session: undefined }));
+    setSheetHydra((h) => ({ key: h.key + 1, session: undefined }));
+    setMode("chat");
     closeSidebarIfMobile();
     setError("");
+  };
+  // Rinomina una conversazione (come Claude): titolo modificabile dalla sidebar.
+  const renameChat = (cid: string, title: string) => {
+    const t = title.trim().slice(0, 80);
+    if (!t) return;
+    setChats((prev) => {
+      const next = prev.map((c) => (c.id === cid ? { ...c, title: t } : c));
+      saveChats(next);
+      return next;
+    });
   };
   const selectChat = (cid: string) => {
     const c = chats.find((x) => x.id === cid);
@@ -466,6 +476,7 @@ function Chat() {
         onSelect={selectChat}
         onNew={newChat}
         onDelete={deleteChat}
+        onRename={renameChat}
         onClose={() => setSidebar(false)}
       />
 
