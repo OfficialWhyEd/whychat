@@ -90,6 +90,7 @@ export interface Message {
   thoughts?: string; // ragionamento (modalità pensiero profondo)
   plan?: PlanStepData[]; // piano agente (plan mode) → timeline
   planActive?: number; // indice del passo in corso (precedenti = fatti)
+  image?: string; // immagine allegata dall'utente (dataURL) → vision /api/see
 }
 
 export default function ChatMessage({
@@ -169,8 +170,19 @@ export default function ChatMessage({
   if (isUser) {
     return (
       <div className="rise flex justify-end px-4">
-        <div className="max-w-[78%] rounded-2xl rounded-br-md bg-[rgba(242,239,233,0.06)] px-4 py-2.5 text-[0.95rem] leading-relaxed text-paper border border-[var(--color-line2)]">
-          {msg.content}
+        <div className="flex max-w-[78%] flex-col items-end gap-1.5">
+          {msg.image && (
+            <img
+              src={msg.image}
+              alt="immagine allegata"
+              className="max-h-56 rounded-2xl rounded-br-md border border-[var(--color-line2)] object-contain"
+            />
+          )}
+          {msg.content && (
+            <div className="rounded-2xl rounded-br-md border border-[var(--color-line2)] bg-[rgba(242,239,233,0.06)] px-4 py-2.5 text-[0.95rem] leading-relaxed text-paper">
+              {msg.content}
+            </div>
+          )}
         </div>
       </div>
     );

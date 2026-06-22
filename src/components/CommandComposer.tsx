@@ -95,7 +95,7 @@ const itemV = {
 };
 
 interface Props {
-  onSend: (text: string) => void;
+  onSend: (text: string, image?: string) => void;
   disabled: boolean;
   mode: Mode;
   onMode: (m: Mode) => void;
@@ -122,12 +122,36 @@ function looksComplex(t: string): boolean {
 export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan }: Props) {
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
+  const [image, setImage] = useState<string | null>(null); // immagine allegata (dataURL)
   const ref = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const reduce = useReducedMotion();
-  // "Armato": c'è testo pronto da inviare. Il primario si accende, la barra respira.
-  const armed = value.trim().length > 0 && !disabled;
+  // "Armato": c'è testo o un'immagine pronti da inviare. Il primario si accende.
+  const armed = (value.trim().length > 0 || !!image) && !disabled;
+
+  // Legge il file scelto come dataURL (compatto: lo ridimensiona a max 1280px).
+  const onFile = (file: File | null | undefined) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1280;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+        setImage(c.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => setImage(src);
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
   // suggerimento plan mode per domande complesse/lunghe (consigliata, non forzata)
   const suggestPlan = !plan && !!onTogglePlan && PLANNABLE.includes(mode) && looksComplex(value);
 
@@ -160,9 +184,11 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
   const submit = () => {
     const t = value.trim();
-    if (!t || disabled) return;
-    onSend(t);
+    if ((!t && !image) || disabled) return;
+    onSend(t, image ?? undefined);
     setValue("");
+    setImage(null);
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   const pick = (m: Mode) => {
@@ -281,6 +307,36 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             : "ring-transparent focus-within:ring-signal/25 focus-within:shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_26px_-10px_rgba(201,75,37,0.42)]"
         }`}
       >
+        {/* preview dell'immagine allegata (sopra il testo, mai sovrapposta) */}
+        <AnimatePresence>
+          {image && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: EASE_OUT }}
+              className="mb-1.5 flex items-center gap-2 px-0.5"
+            >
+              <div className="relative">
+                <img src={image} alt="allegato" className="h-14 w-14 rounded-xl border border-[var(--color-line2)] object-cover" />
+                <button
+                  onClick={() => {
+                    setImage(null);
+                    if (fileRef.current) fileRef.current.value = "";
+                  }}
+                  title="Rimuovi"
+                  className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full border border-[var(--color-line2)] bg-[#141009] text-faint transition hover:text-paper"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <span className="mono text-[0.55rem] text-faint">immagine pronta — WhyChat la vede</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* riga 1 — il testo */}
         <div className="relative px-0.5">
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
@@ -329,6 +385,30 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             >
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             </motion.svg>
+          </motion.button>
+
+          {/* tasto: allega immagine → WhyChat la VEDE (vision /api/see) */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onFile(e.target.files?.[0])}
+          />
+          <motion.button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            title="Allega un'immagine"
+            whileTap={{ scale: 0.93 }}
+            transition={{ type: "spring", stiffness: 420, damping: 16 }}
+            className={`flex h-9 shrink-0 items-center justify-center rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
+              image ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
+            }`}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M21 15l-5-5L5 21M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="9" cy="9" r="2" />
+            </svg>
           </motion.button>
 
           {/* tasto: cerca sul web (Wikipedia) — inietta risultati reali nel contesto */}
@@ -412,7 +492,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           ) : (
             <OriginButton
               onClick={submit}
-              disabled={disabled || !value.trim()}
+              disabled={disabled || (!value.trim() && !image)}
               title="Invia"
               fill="rgba(255,228,198,0.42)"
               fillText="#0a0908"

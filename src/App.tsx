@@ -19,7 +19,7 @@ import ChatMinimap from "./components/ChatMinimap";
 import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, planSteps, geocodePlace, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, type ChatMessage as ApiMsg } from "./lib/api";
 import type { MapPin } from "./components/WhyEarthLive";
 const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
 // estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
@@ -215,7 +215,7 @@ function Chat() {
     if (sheetIdRef.current) setActiveId(sheetIdRef.current);
   }, []);
 
-  const send = async (text: string, modeOverride?: Mode) => {
+  const send = async (text: string, image?: string, modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
     const existing = chats.find((c) => c.id === activeId);
@@ -224,7 +224,7 @@ function Chat() {
     // un'apertura (modeOverride) o una chat nuova usano la modalità scelta ora.
     const useMode: Mode = modeOverride ?? (existing ? existing.mode ?? "chat" : mode);
     if (useMode !== mode) setMode(useMode);
-    const userMsg: Message = { id: uid(), role: "user", content: text };
+    const userMsg: Message = { id: uid(), role: "user", content: text, ...(image ? { image } : {}) };
     const aiMsg: Message = { id: uid(), role: "assistant", content: "", streaming: true };
 
     const baseMessages = existing?.messages ?? [];
@@ -258,7 +258,24 @@ function Chat() {
       );
 
     try {
-      if (useMode === "deep") {
+      if (image) {
+        // C'è un'immagine: WhyChat la GUARDA (vision /api/see) e risponde/crea.
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        let acc = "";
+        await seeSheet(
+          image,
+          text || "Guarda questa immagine e aiutami: descrivi, spiega o crea ciò che serve.",
+          baseMessages.map((m) => ({ role: m.role, content: m.content })),
+          (d) => {
+            acc += d;
+            patch(acc);
+          },
+          ctrl.signal,
+        );
+        patch(acc, true);
+        if (autoTtsRef.current) speak(acc);
+      } else if (useMode === "deep") {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
         let thoughts = "";
@@ -629,7 +646,7 @@ function Chat() {
             <main ref={scrollRef} onScroll={onScroll} className="scroll-thin relative flex-1 overflow-y-auto">
               <div className="mx-auto max-w-2xl px-4 py-6">
                 {empty ? (
-                  <Hero onPick={send} />
+                  <Hero onPick={(t, m) => send(t, undefined, m)} />
                 ) : (
                   <div className="flex flex-col gap-6">
                     {messages.map((m, i) => (
