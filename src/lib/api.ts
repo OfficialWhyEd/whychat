@@ -108,15 +108,16 @@ export async function streamChat(
  * streaming. `image` è un dataURL (PNG/JPEG) del canvas; `prompt` è cosa chiedi.
  */
 export async function seeSheet(
-  image: string,
+  image: string | string[],
   prompt: string,
   history: ChatMessage[],
   onToken: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const imgBody = Array.isArray(image) ? { images: image } : { image };
   const res = await postWithRetry(
     "/api/see",
-    { image, prompt, history, visitorId: visitorId(), name: getName() },
+    { ...imgBody, prompt, history, visitorId: visitorId(), name: getName() },
     signal,
   );
   if (!res.ok || !res.body) throw new Error(await readError(res));

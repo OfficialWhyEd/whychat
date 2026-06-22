@@ -90,8 +90,8 @@ export interface Message {
   thoughts?: string; // ragionamento (modalità pensiero profondo)
   plan?: PlanStepData[]; // piano agente (plan mode) → timeline
   planActive?: number; // indice del passo in corso (precedenti = fatti)
-  image?: string; // immagine allegata dall'utente (dataURL) → vision /api/see
-  file?: { name: string; kind: string }; // allegato non-immagine (testo/file) → chip
+  image?: string; // immagine singola (OnlyType: snapshot del foglio)
+  attachments?: { image?: string; name: string; kind: string }[]; // allegati (più file)
 }
 
 export default function ChatMessage({
@@ -181,12 +181,28 @@ export default function ChatMessage({
               className="max-h-56 rounded-2xl rounded-br-md border border-[var(--color-line2)] object-contain"
             />
           )}
-          {msg.file && (
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.04)] px-3 py-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-faint">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span className="mono max-w-[180px] truncate text-[0.6rem] text-dim">{msg.file.name}</span>
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {msg.attachments.map((a, i) =>
+                a.image ? (
+                  <img
+                    key={i}
+                    src={a.image}
+                    alt={a.name}
+                    className="h-20 w-20 rounded-xl border border-[var(--color-line2)] object-cover"
+                  />
+                ) : (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.04)] px-3 py-2"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-faint">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="mono max-w-[140px] truncate text-[0.6rem] text-dim">{a.name}</span>
+                  </div>
+                ),
+              )}
             </div>
           )}
           {msg.content && (
