@@ -20,7 +20,16 @@ import ArtifactPanel, { type ArtifactData } from "./components/ArtifactPanel";
 import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
-import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, type ChatMessage as ApiMsg } from "./lib/api";
+
+// Adaptive reasoning: domanda "impegnativa" → WhyChat ragiona da solo (poi puoi
+// saltare con "Rispondi Ora"). Stessa euristica del composer.
+function looksComplex(t: string): boolean {
+  const s = t.trim();
+  if (s.length > 180) return true;
+  if ((s.match(/\?/g)?.length ?? 0) >= 2) return true;
+  return /\b(progett\w+|costruisc\w+|costruire|pianific\w+|analizz\w+|confront\w+|organizz\w+|strategi\w+|spiega\w*|perché|perche|come mai|dimostra\w*|calcol\w+|risolv\w+|piano|passo\s*passo|step by step|in dettaglio|tutti i passaggi)\b/i.test(s);
+}
 import type { MapPin } from "./components/WhyEarthLive";
 const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
 // estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
@@ -109,6 +118,10 @@ function Chat() {
   // Artifact aperto nel pannello laterale (stile Claude Desktop).
   const [artifact, setArtifact] = useState<ArtifactData | null>(null);
   const openArtifact = useCallback((title: string, html: string) => setArtifact({ title, html }), []);
+  // Adaptive reasoning: il messaggio che sta ragionando ora + come saltarlo.
+  const [reasoningId, setReasoningId] = useState<string | null>(null);
+  const respondNowRef = useRef<(() => void) | null>(null);
+  const respondNow = useCallback(() => respondNowRef.current?.(), []);
 
   const active = chats.find((c) => c.id === activeId) ?? null;
   const messages = active?.messages ?? [];
@@ -333,6 +346,66 @@ function Chat() {
           },
           ctrl.signal,
         );
+        apply(true);
+        if (autoTtsRef.current) speak(answer);
+      } else if (["chat", "canvas", "learn"].includes(useMode) && !planRef.current && looksComplex(text)) {
+        // ADAPTIVE REASONING: WhyChat ragiona da solo (pensiero+risposta in
+        // parallelo, stile DeepSeek). Puoi saltarlo con "Rispondi Ora".
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        setReasoningId(aiMsg.id);
+        let thoughts = "";
+        let answer = "";
+        const apply = (done = false) =>
+          setChats((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, content: answer, thoughts, streaming: !done } : m)) }
+                : c,
+            ),
+          );
+        let skipped = false;
+        respondNowRef.current = () => {
+          skipped = true;
+          ctrl.abort();
+        };
+        try {
+          await reasonGroq(
+            history,
+            (d) => {
+              thoughts += d;
+              apply();
+            },
+            (d) => {
+              answer += d;
+              apply();
+            },
+            ctrl.signal,
+            useMode,
+          );
+        } catch (e) {
+          if (!skipped && (e as Error).name !== "AbortError") throw e;
+        }
+        respondNowRef.current = null;
+        setReasoningId(null);
+        // saltato prima di una risposta → risposta diretta veloce (niente attesa)
+        if (skipped && !answer.trim()) {
+          const ctrl2 = new AbortController();
+          abortRef.current = ctrl2;
+          let acc = "";
+          await streamChat(
+            history,
+            (d) => {
+              acc += d;
+              answer = acc;
+              apply();
+            },
+            ctrl2.signal,
+            useMode,
+            model,
+            webSearch,
+          );
+        }
         apply(true);
         if (autoTtsRef.current) speak(answer);
       } else {
@@ -684,6 +757,7 @@ function Chat() {
                           msg={m}
                           prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
                           onOpenArtifact={openArtifact}
+                          onRespondNow={m.id === reasoningId ? respondNow : undefined}
                           onRetry={
                             m.role === "assistant" && !streaming
                               ? () => {
