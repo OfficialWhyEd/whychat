@@ -210,6 +210,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         v.onseeked = grab;
         // fallback: se 'seeked' non scatta, prova lo stesso dopo 1.5s
         setTimeout(grab, 1500);
+      } else if (mime === "application/pdf" || /\.pdf$/i.test(name)) {
+        // PDF: anteprima vera col viewer del browser (iframe sull'objectURL)
+        addAttach({ id, name, kind: "file", url: URL.createObjectURL(file) });
       } else if (isTextLike(mime, name)) {
         const reader = new FileReader();
         reader.onload = () => addAttach({ id, name, kind: "text", text: String(reader.result).slice(0, 12000) });
@@ -384,7 +387,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               transition={{ duration: 0.22, ease: EASE_OUT }}
               className="scroll-none mb-1.5 flex items-center gap-2 overflow-x-auto px-0.5 pb-0.5"
             >
-              {attachments.map((a) => (
+              {attachments.map((a) => {
+                const isHtml = a.kind === "text" && /\.html?$/i.test(a.name);
+                return (
                 <div key={a.id} className="relative shrink-0">
                   {a.kind === "video" && a.url ? (
                     <video
@@ -396,6 +401,24 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     />
                   ) : a.image ? (
                     <img src={a.image} alt={a.name} className="h-16 w-16 rounded-xl border border-[var(--color-line2)] object-cover" />
+                  ) : a.url ? (
+                    // PDF: anteprima reale col viewer del browser
+                    <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-[var(--color-line2)] bg-white">
+                      <iframe src={`${a.url}#toolbar=0&view=FitH`} title={a.name} className="pointer-events-none h-[200%] w-[200%] origin-top-left scale-50 border-0" />
+                      <span className="mono absolute bottom-0 left-0 right-0 truncate bg-black/60 px-1 text-center text-[0.4rem] text-paper">{a.name}</span>
+                    </div>
+                  ) : isHtml ? (
+                    // HTML: anteprima renderizzata (sandboxed)
+                    <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-[var(--color-line2)] bg-[#0a0908]">
+                      <iframe srcDoc={a.text} title={a.name} sandbox="" className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-[0.25] border-0" />
+                      <span className="mono absolute bottom-0 left-0 right-0 truncate bg-black/60 px-1 text-center text-[0.4rem] text-paper">{a.name}</span>
+                    </div>
+                  ) : a.kind === "text" ? (
+                    // Testo/codice: anteprima del contenuto (snippet)
+                    <div className="h-16 w-20 overflow-hidden rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.03)] p-1">
+                      <pre className="mono h-9 overflow-hidden whitespace-pre-wrap break-all text-[0.36rem] leading-[1.25] text-faint">{(a.text ?? "").slice(0, 220)}</pre>
+                      <span className="mono mt-0.5 block truncate text-[0.4rem] text-dim">{a.name}</span>
+                    </div>
                   ) : (
                     <div className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.03)] px-1 text-faint">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -414,7 +437,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                     </svg>
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>
