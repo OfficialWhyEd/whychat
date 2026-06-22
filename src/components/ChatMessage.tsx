@@ -8,7 +8,7 @@ import { ShiningText } from "./ShiningText";
 import { WLoader } from "./WLoader";
 import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
 import { AgentPlanning, type PlanStep, type PlanStepStatus } from "./AgentPlanning";
-import { FileCard, formatOf } from "./ui/file-card-collections";
+import FileChip from "./FileChip";
 import type { PlanStepData } from "../lib/api";
 
 // tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
@@ -193,10 +193,7 @@ export default function ChatMessage({
                     className="h-20 w-20 rounded-xl border border-[var(--color-line2)] object-cover"
                   />
                 ) : (
-                  <div key={i} className="flex flex-col items-center gap-1 px-1.5" title={a.name}>
-                    <FileCard formatFile={formatOf(a.name)} />
-                    <span className="mono w-full max-w-[88px] truncate text-center text-[0.5rem] text-dim">{a.name}</span>
-                  </div>
+                  <FileChip key={i} name={a.name} />
                 ),
               )}
             </div>
