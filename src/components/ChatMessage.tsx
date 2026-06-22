@@ -8,6 +8,7 @@ import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
 import { AgentPlanning, type PlanStep, type PlanStepStatus } from "./AgentPlanning";
 import FileChip from "./FileChip";
 import ReasoningPanel from "./ReasoningPanel";
+import { AnimatedIcon } from "./effects/AnimatedIcon";
 import type { PlanStepData } from "../lib/api";
 
 // tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
@@ -277,15 +278,17 @@ export default function ChatMessage({
                 title={speaking ? "Ferma voce" : "Ascolta"}
                 className={`grid h-7 w-7 place-items-center rounded-md transition hover:bg-[rgba(242,239,233,0.06)] ${speaking ? "text-ember" : "text-faint hover:text-paper"}`}
               >
-                {speaking ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M8 5v14l11-7z" fill="currentColor" />
-                  </svg>
-                )}
+                <AnimatedIcon pop={false} active={speaking}>
+                  {speaking ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <path d="M8 5v14l11-7z" fill="currentColor" />
+                    </svg>
+                  )}
+                </AnimatedIcon>
               </button>
             )}
             <button
@@ -293,16 +296,18 @@ export default function ChatMessage({
               title={copied ? "Copiato" : "Copia"}
               className="grid h-7 w-7 place-items-center rounded-md text-faint transition hover:bg-[rgba(242,239,233,0.06)] hover:text-paper"
             >
-              {copied ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M5 12l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.7" />
-                  <path d="M5 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-              )}
+              <AnimatedIcon pop={false} active={copied}>
+                {copied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                    <path d="M5 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                )}
+              </AnimatedIcon>
             </button>
             {onRetry && (
               <button
@@ -310,9 +315,11 @@ export default function ChatMessage({
                 title="Rigenera"
                 className="grid h-7 w-7 place-items-center rounded-md text-faint transition hover:bg-[rgba(242,239,233,0.06)] hover:text-paper"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <AnimatedIcon pop={false}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </AnimatedIcon>
               </button>
             )}
             <button
@@ -320,18 +327,22 @@ export default function ChatMessage({
               title="Mi piace"
               className={`grid h-7 w-7 place-items-center rounded-md transition hover:bg-[rgba(242,239,233,0.06)] ${vote === "up" ? "text-signal" : "text-faint hover:text-paper"}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3zm0 0 4.5-7.5a1.5 1.5 0 0 1 2.7 1.2L13 9h6a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 19H7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-              </svg>
+              <AnimatedIcon pop={false} active={vote === "up"}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3zm0 0 4.5-7.5a1.5 1.5 0 0 1 2.7 1.2L13 9h6a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 19H7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+              </AnimatedIcon>
             </button>
             <button
               onClick={() => setVote((v) => (v === "down" ? null : "down"))}
               title="Non mi piace"
               className={`grid h-7 w-7 place-items-center rounded-md transition hover:bg-[rgba(242,239,233,0.06)] ${vote === "down" ? "text-signal-soft" : "text-faint hover:text-paper"}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M17 13V4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3zm0 0-4.5 7.5a1.5 1.5 0 0 1-2.7-1.2L11 15H5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.2 5H17" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-              </svg>
+              <AnimatedIcon pop={false} active={vote === "down"}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M17 13V4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3zm0 0-4.5 7.5a1.5 1.5 0 0 1-2.7-1.2L11 15H5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.2 5H17" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+              </AnimatedIcon>
             </button>
           </div>
         )}
