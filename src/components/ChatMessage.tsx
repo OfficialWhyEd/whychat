@@ -4,11 +4,10 @@ import { speak, stop as ttsStop, ttsSupported, voice } from "../lib/tts";
 import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
 import WhyMark from "./WhyMark";
-import { ShiningText } from "./ShiningText";
-import { WLoader } from "./WLoader";
 import { YouTubeEmbed, extractYouTubeIds } from "./YouTubeEmbed";
 import { AgentPlanning, type PlanStep, type PlanStepStatus } from "./AgentPlanning";
 import FileChip from "./FileChip";
+import ReasoningPanel from "./ReasoningPanel";
 import type { PlanStepData } from "../lib/api";
 
 // tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
@@ -100,11 +99,13 @@ export default function ChatMessage({
   onRetry,
   prompt = "",
   onOpenArtifact,
+  onRespondNow,
 }: {
   msg: Message;
   onRetry?: () => void;
   prompt?: string; // la domanda che ha generato questa risposta → tema del ragionamento
   onOpenArtifact?: (title: string, html: string) => void; // apri l'artifact nel pannello laterale
+  onRespondNow?: () => void; // adaptive reasoning: salta il ragionamento e rispondi ora
 }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
@@ -245,10 +246,7 @@ export default function ChatMessage({
         )}
 
         {thinking ? (
-          <div className="flex items-center gap-2 text-ember">
-            <WLoader size={20} />
-            <ShiningText text={`${thinkingLabel}…`} className="text-[0.95rem]" />
-          </div>
+          <ReasoningPanel thoughts={msg.thoughts ?? ""} label={thinkingLabel} onRespondNow={onRespondNow} />
         ) : (
           <div ref={bodyRef} className={`wc-bot-body${speaking ? " wc-speak" : ""}`}>
             {parseSegments(msg.content || "").map((seg, i) =>
