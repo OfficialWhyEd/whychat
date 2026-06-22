@@ -363,8 +363,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           />
         </div>
 
-        {/* riga 2 — i controlli; flex-wrap così su telefono non sforano mai */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        {/* riga 2 — i controlli. Il send resta SOLIDO a destra (mai a capo): i
+            tasti a sinistra scorrono in orizzontale su mobile invece di wrappare. */}
+        <div className="mt-2 flex items-center gap-2">
+          <div className="scroll-none flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
           {/* modalità → apre la palette */}
           <motion.button
             onClick={() => setMenu((s) => !s)}
@@ -478,8 +480,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             </motion.button>
           )}
 
-          {/* spinge il send a destra: bilancia la riga */}
-          <div className="flex-1" />
+          </div>
 
           {streaming ? (
             <button
