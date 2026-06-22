@@ -9,6 +9,6 @@ await (await p.$("textarea")).click();
 await p.keyboard.type("File cards");
 await p.setInputFiles('input[type="file"]', ["/tmp/pv.pdf","/tmp/pv.md","/tmp/pv.csv","/tmp/pv.zip","/tmp/pv.json","/tmp/pv.js"]);
 await p.waitForTimeout(1000);
-await p.screenshot({ path: "/tmp/wc-filecards.png", clip: { x: 300, y: 450, width: 680, height: 340 } });
+await p.screenshot({ path: "/tmp/wc-filecards.png", clip: { x: 300, y: 415, width: 700, height: 400 } });
 await b.close();
 console.log("ok");

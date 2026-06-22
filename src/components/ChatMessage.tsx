@@ -193,8 +193,9 @@ export default function ChatMessage({
                     className="h-20 w-20 rounded-xl border border-[var(--color-line2)] object-cover"
                   />
                 ) : (
-                  <div key={i} className="grid place-items-center px-1.5" title={a.name}>
+                  <div key={i} className="flex flex-col items-center gap-1 px-1.5" title={a.name}>
                     <FileCard formatFile={formatOf(a.name)} />
+                    <span className="mono w-full max-w-[88px] truncate text-center text-[0.5rem] text-dim">{a.name}</span>
                   </div>
                 ),
               )}
