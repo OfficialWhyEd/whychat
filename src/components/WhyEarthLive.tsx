@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { placeImage } from "../lib/api";
 
 /**
  * WhyEarthLive — la "mappa viva" di WhyEarth (il sogno): un globo MapLibre vero.
@@ -21,6 +22,20 @@ export default function WhyEarthLive({ focus, onExit }: { focus: MapPin | null; 
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [img, setImg] = useState<string | null>(null); // immagine del luogo (Wikipedia)
+
+  // "ti mostra immagini": quando arriva un luogo, cerca una sua foto keyless.
+  useEffect(() => {
+    if (!focus) return;
+    let alive = true;
+    setImg(null);
+    placeImage(focus.name).then((src) => {
+      if (alive) setImg(src);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [focus]);
 
   // init una volta
   useEffect(() => {
@@ -81,6 +96,13 @@ export default function WhyEarthLive({ focus, onExit }: { focus: MapPin | null; 
       {focus && (
         <div className="mono pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.72)] px-3 py-1 text-[0.55rem] text-paper backdrop-blur">
           📍 {focus.name}
+        </div>
+      )}
+      {/* "ti dà un'immagine": foto del luogo (Wikipedia), in basso a destra */}
+      {focus && img && (
+        <div className="pointer-events-none absolute bottom-4 right-4 w-44 overflow-hidden rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.72)] shadow-[0_8px_30px_rgba(0,0,0,0.5)] backdrop-blur">
+          <img src={img} alt={focus.name} className="h-28 w-full object-cover" />
+          <div className="mono truncate px-2.5 py-1.5 text-[0.5rem] text-dim">{focus.name}</div>
         </div>
       )}
       {onExit && (

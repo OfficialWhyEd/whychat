@@ -165,6 +165,28 @@ export async function geocodePlace(name: string): Promise<{ lng: number; lat: nu
   }
 }
 
+/** Immagine keyless di un luogo (Wikipedia REST summary, CORS aperto). Per WhyEarth:
+ *  quando pianti il pin, "ti dà un'immagine" del posto. Prova IT poi EN. */
+export async function placeImage(name: string): Promise<string | null> {
+  const title = name.split(",")[0].trim(); // "Roma, Italia" → "Roma"
+  if (!title) return null;
+  for (const lang of ["it", "en"]) {
+    try {
+      const res = await fetch(
+        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) continue;
+      const d = (await res.json()) as { thumbnail?: { source?: string }; originalimage?: { source?: string } };
+      const src = d.thumbnail?.source || d.originalimage?.source;
+      if (src) return src;
+    } catch {
+      /* prova la prossima lingua */
+    }
+  }
+  return null;
+}
+
 export interface Dream {
   date: string;
   ts: string;
