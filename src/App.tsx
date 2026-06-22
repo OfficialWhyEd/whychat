@@ -823,11 +823,38 @@ function Chat() {
 
       {artifact && <ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} />}
 
-      {error && (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-20 -translate-x-1/2 text-xs text-signal-soft">
-          {error}
-        </div>
-      )}
+      {/* errore (502/404/rete): card centrata ben fatta, animata, chiudibile — nota IMG_9886 */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            key="err"
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 360, damping: 26 }}
+            className="fixed bottom-24 left-1/2 z-30 flex max-w-[min(90vw,420px)] -translate-x-1/2 items-start gap-3 rounded-2xl border border-signal/40 bg-[rgba(20,16,9,0.92)] px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+          >
+            <span className="mt-0.5 shrink-0 text-signal-soft">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[0.82rem] leading-snug text-paper">{error.replace(/^⚠\s*/, "")}</div>
+              <div className="mono mt-0.5 text-[0.5rem] text-faint">Riprova tra un istante — a volte è solo un picco.</div>
+            </div>
+            <button
+              onClick={() => setError("")}
+              title="Chiudi"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-faint transition hover:text-paper"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
