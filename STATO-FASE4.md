@@ -30,13 +30,13 @@ Il token nel Portachiavi **deploya ma non ha permesso KV** (verificato: errore 1
 ## Modalità
 | # | Voce | Stato |
 |---|------|-------|
-| 9 | OnlyType (disegno→crea, foglio, motion-blur) | 🟡 da verificare regressione |
+| 9 | OnlyType (disegno→crea, foglio, motion-blur) | ✅ render intatto (foglio+strumenti+composer), regressione assente |
 | 10 | Adaptive reasoning + "Rispondi ora" | 🟡 /api/reason c'è; bottone da verificare |
 | 11 | Deep Thinking visibile | ✅ |
 | 12 | Group Prediction UI multi-agente | 🟡 backend ✅, UI da rifinire (KV per memoria) |
 | 13 | WhyEarth chat-nel-globo + pin + toggle | 🟡 pin+toggle ✅, "immagini sul globo" 🔴 |
 | 14 | WhyMusic analisi traccia | ✅ |
-| 15 | WhyEntropy conversabile | 🔴 visiva, non conversabile |
+| 15 | WhyEntropy conversabile | ✅ system prompt a tema + overlay chat (verificato) |
 | 16 | Plan Mode su task complessi | ✅ /api/plan + AgentPlanning |
 | 17 | Azioni-agente visibili (bash/tool) | ✅ AgentPlanning |
 | — | WhyEcosystem simulazioni + download | ✅ (volpi/conigli, captureStream) |
@@ -44,7 +44,7 @@ Il token nel Portachiavi **deploya ma non ha permesso KV** (verificato: errore 1
 ## Effetti (componenti dei prompt 21st.dev)
 DotLoader ✅ · ProgressiveFluxLoader ✅ · TextInertia ✅ · ShiningText ✅ · AnimatedCounter ✅ ·
 HoverPreview ✅ · DiaText ✅ · GlowCard/spotlight ✅ · ProtocolBadge/AwardBadge ✅ · YouTubeEmbed ✅ ·
-SilkTrails (scie mouse) ✅ · AiInput search toggle 🟡 (toggle c'è, web search lato worker da verificare).
+SilkTrails (scie mouse) ✅ · Web search ✅ (toggle + auto `needsLiveInfo` → Wikipedia/HN, verificato).
 
 ## Infrastruttura / governance
 | # | Voce | Stato |
