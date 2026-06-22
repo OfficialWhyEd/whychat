@@ -116,7 +116,8 @@ export interface Attachment {
   id: string;
   name: string;
   kind: "image" | "video" | "text" | "file";
-  image?: string; // dataURL per la vista (immagine o frame del video) → vision
+  image?: string; // dataURL per la VISTA (thumbnail immagine o frame del video)
+  data?: string; // dataURL da far LEGGERE a Gemini (immagine / frame / PDF / …)
   text?: string; // contenuto testuale (txt/md/csv/json/codice)
   url?: string; // objectURL per l'anteprima del video
 }
@@ -195,8 +196,11 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         const reader = new FileReader();
         reader.onload = () => {
           const img = new Image();
-          img.onload = () => addAttach({ id, name, kind: "image", image: downscale(img, img.width, img.height) });
-          img.onerror = () => addAttach({ id, name, kind: "image", image: String(reader.result) });
+          img.onload = () => {
+            const d = downscale(img, img.width, img.height);
+            addAttach({ id, name, kind: "image", image: d, data: d }); // data → Gemini lo legge
+          };
+          img.onerror = () => addAttach({ id, name, kind: "image", image: String(reader.result), data: String(reader.result) });
           img.src = String(reader.result);
         };
         reader.readAsDataURL(file);
@@ -213,7 +217,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         const grab = () => {
           try {
             const frame = downscale(v, v.videoWidth, v.videoHeight);
-            setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, image: frame } : a)));
+            // image = anteprima, data = ciò che Gemini legge (il fotogramma)
+            setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, image: frame, data: frame } : a)));
           } catch {
             /* niente frame: resta l'anteprima video */
           }
@@ -226,6 +231,11 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         v.onseeked = grab;
         // fallback: se 'seeked' non scatta, prova lo stesso dopo 1.5s
         setTimeout(grab, 1500);
+      } else if (mime === "application/pdf" || /\.pdf$/i.test(name)) {
+        // PDF: lo legge Gemini direttamente (inlineData application/pdf)
+        const reader = new FileReader();
+        reader.onload = () => addAttach({ id, name, kind: "file", data: String(reader.result) });
+        reader.readAsDataURL(file);
       } else if (isTextLike(mime, name)) {
         const reader = new FileReader();
         reader.onload = () => addAttach({ id, name, kind: "text", text: String(reader.result).slice(0, 12000) });
