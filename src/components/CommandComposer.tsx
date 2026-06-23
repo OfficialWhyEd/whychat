@@ -106,6 +106,7 @@ interface Props {
   onToggleSearch?: () => void;
   plan?: boolean;
   onTogglePlan?: () => void;
+  name?: string; // se noto, WhyChat personalizza i suggerimenti (dopo il primo, generale)
 }
 
 // plan mode disponibile in TUTTE le modalità non-beta (utile ovunque)
@@ -120,7 +121,12 @@ function looksComplex(t: string): boolean {
   );
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name }: Props) {
+  // Suggerimenti: il PRIMO è sempre generale; se WhyChat conosce la persona, dal
+  // secondo in poi (quindi "dopo un tot") entrano frasi personalizzate col nome.
+  const placeholders = name
+    ? [PLACEHOLDERS[0], `${name}, da dove partiamo?`, `Cosa hai in mente, ${name}?`, "Chi sono io per te?"]
+    : PLACEHOLDERS;
   const [value, setValue] = useState("");
   const [menu, setMenu] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]); // più file insieme
@@ -501,7 +507,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
           {!value && mode !== "sheet" && (
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 pl-[11px] text-[1rem] leading-7 text-faint">
-              <Typewriter text={PLACEHOLDERS} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
+              <Typewriter text={placeholders} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
             </div>
           )}
           <textarea
