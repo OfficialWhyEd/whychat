@@ -13,3 +13,8 @@ SESSIONE_PRECEDENTE_MESSAGGI.md
 
 # handoff di lavoro (riferimenti, niente segreti) — locale
 HANDOFF.md
+
+# core privato (spostato in repo whychat-core)
+worker/
+whychat-openclaw/SOUL.md
+wrangler.toml
