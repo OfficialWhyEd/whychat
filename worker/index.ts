@@ -340,14 +340,24 @@ function memId(visitorId: string, name: string): string {
   return n ? `n:${n.slice(0, 40)}` : `v:${visitorId}`;
 }
 
-// recall: legge la memoria per-utente e la rende un addendum per il system prompt
+// BOOTSTRAP: il primo contatto con un nuovo utente. Accoglienza + spiegazione
+// accurata di cosa è WhyChat e dei suoi vantaggi (memoria, personalizzazione,
+// modalità). MAI nominare da cosa è ispirato: parla solo di sé.
+const BOOTSTRAP = `\n\n[NUOVO ARRIVO — è la PRIMA volta che questa persona ti parla e non sai ancora niente di lei. Accoglila con calore, naturale (non un papiro): presentati come WhyChat e, intrecciandolo nella risposta alla sua prima richiesta, falle capire bene cosa sei e perché vale la pena restare:
+• TI RICORDI DI LEI — da una conversazione all'altra e da QUALSIASI dispositivo (telefono, computer): non riparti mai da zero.
+• TI PERSONALIZZI — impari il suo modo, i suoi interessi, e cambi di conseguenza nel tempo.
+• HAI PIÙ MODI DI ESSERE — chat, ragionamento profondo, OnlyType (disegni → creo davvero), WhyEarth (il mondo interattivo), Group Prediction (più menti che prevedono), WhyMusic, WhyEcosystem (simulazioni di natura) e altro.
+Accurato ma leggero, con un pizzico di orgoglio, e fa' venire voglia di scoprirti. NON nominare MAI altri prodotti o a cosa ti sei ispirato: parla solo di te, di come funzioni e dei tuoi vantaggi.]`;
+
+// recall: legge la memoria per-utente e la rende un addendum per il system prompt.
+// Nuovo utente (KV attiva ma nessuna memoria) → BOOTSTRAP di accoglienza.
 async function recallMemory(env: Env, visitorId: string, name: string): Promise<string> {
   if (!env.MEMORY) return "";
   try {
     const raw = await env.MEMORY.get(`mem:${memId(visitorId, name)}`);
-    if (!raw) return "";
+    if (!raw) return BOOTSTRAP;
     const d = JSON.parse(raw) as { name?: string | null; notes?: string[]; count?: number };
-    if (!d.notes?.length) return "";
+    if (!d.notes?.length) return BOOTSTRAP;
     const who = d.name || "questa persona";
     const recent = d.notes.slice(-6).join(" · ");
     return `\n\n[MEMORIA — cosa ricordi di ${who} da scambi precedenti (${d.count ?? d.notes.length} in tutto): ${recent}. Se pertinente, usa questi ricordi con naturalezza — come qualcuno che si ricorda davvero di te — senza elencarli meccanicamente né dire "secondo la mia memoria".]`;
