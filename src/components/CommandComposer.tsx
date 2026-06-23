@@ -410,6 +410,23 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
       <div ref={barRef} className="relative" style={{ "--tts": "0" } as React.CSSProperties}>
+        {/* LUCE DIETRO il vetro: senza qualcosa di luminoso dietro, il liquid glass
+            sul vuoto nero non si vede. Questo alone caldo deriva lentamente: il vetro
+            lo sfoca/rifrange → l'effetto si NOTA (anche su Safari/iPhone). */}
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -inset-3 z-0 rounded-[34px]"
+          style={{
+            background:
+              "radial-gradient(58% 130% at 28% 0%, rgba(240,163,106,0.34), transparent 68%), radial-gradient(52% 130% at 82% 100%, rgba(201,75,37,0.28), transparent 70%)",
+            filter: "blur(16px)",
+          }}
+          animate={reduce ? undefined : { x: [-12, 14, -12], y: [-5, 7, -5] }}
+          transition={{
+            x: { duration: 9, repeat: Infinity, ease: "easeInOut" },
+            y: { duration: 11.5, repeat: Infinity, ease: "easeInOut" },
+          }}
+        />
         {/* rim liquid-glass (Apple): bordo vetro spesso — top edge luminoso (specular),
             glow interno alto, ombra interna bassa = profondità del vetro curvo */}
         <div
@@ -440,19 +457,19 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               "0 0 calc(var(--tts,0) * 46px) calc(var(--tts,0) * 8px) rgba(240,163,106,calc(var(--tts,0) * 0.5)), inset 0 0 calc(var(--tts,0) * 22px) rgba(201,75,37,calc(var(--tts,0) * 0.35))",
           }}
         />
-      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={20} aberration={3.5} />}
+      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={26} aberration={5} />}
       <div
         ref={glassRef}
         style={{
-          // Liquid glass: leggermente translucido così le particelle dietro SI
-          // VEDONO e si rifrangono. La mappa-lente (url) piega lo sfondo sui bordi
-          // (centro neutro → niente cucitura). Safari/iOS: frosted pulito di scorta.
+          // Translucido davvero (0.3): l'alone caldo dietro traspare e il vetro
+          // si VEDE. Su Chromium la mappa-lente lo piega (rifrazione + aberrazione);
+          // su Safari/iPhone resta il frosted ma con la luce dietro è comunque vetro.
           background:
-            "linear-gradient(180deg, rgba(242,239,233,0.06), rgba(242,239,233,0.015)), rgba(16,11,8,0.46)",
+            "linear-gradient(180deg, rgba(242,239,233,0.07), rgba(242,239,233,0.015)), rgba(16,11,8,0.3)",
           backdropFilter: lgOn
-            ? "blur(7px) saturate(165%) url(#composer-liquid-glass)"
-            : "blur(18px) saturate(155%)",
-          WebkitBackdropFilter: "blur(18px) saturate(155%)",
+            ? "blur(6px) saturate(175%) url(#composer-liquid-glass)"
+            : "blur(16px) saturate(180%)",
+          WebkitBackdropFilter: "blur(16px) saturate(180%)",
         }}
         className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
           armed
@@ -460,6 +477,22 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             : "ring-transparent focus-within:ring-signal/25 focus-within:shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_26px_-10px_rgba(201,75,37,0.42)]"
         }`}
       >
+        {/* riflesso che SCORRE sul vetro (specular liquido): luce che attraversa
+            lentamente la barra. Funziona ovunque (CSS) → l'effetto vetro si vede
+            anche dove il filtro SVG non è supportato (Safari/iPhone). */}
+        {!reduce && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-[26px]">
+            <motion.div
+              className="absolute -inset-y-4 w-2/5"
+              style={{
+                background:
+                  "linear-gradient(105deg, transparent, rgba(255,255,255,0.07) 35%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.07) 65%, transparent)",
+              }}
+              animate={{ x: ["-80%", "320%"] }}
+              transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 3.5 }}
+            />
+          </div>
+        )}
         {/* preview degli allegati (più file insieme): anteprime affiancate, niente scritta */}
         <AnimatePresence>
           {attachments.length > 0 && (

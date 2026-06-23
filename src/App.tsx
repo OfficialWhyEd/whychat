@@ -906,7 +906,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
   // set simmetrico e SEMPRE DIVERSO, scelto una volta all'apertura della schermata
   const [openers] = useState(() => pickOpeners(4));
   return (
-    <div className="rise flex flex-col items-center text-center">
+    <div className="flex flex-col items-center text-center">
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
       <div style={{ height: "clamp(110px, 24vh, 260px)" }} />
 
@@ -924,19 +924,14 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
 
       {/* aperture — lista editoriale (niente griglia di card), legate alle modalità */}
       <ul className="mt-9 w-full max-w-md text-left">
-        {openers.map((o, i) => (
-          <motion.li
-            key={o.text}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12 + i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          >
+        {openers.map((o) => (
+          <li key={o.text}>
             <button
               onClick={() => onPick(o.text, o.mode)}
               className="group flex w-full items-center gap-3 border-t border-[var(--color-line)] py-3.5 last:border-b"
             >
               <AnimatedIcon
-                delay={0.12 + i * 0.06}
+                pop={false}
                 className="grid h-6 w-6 shrink-0 place-items-center text-faint transition-colors duration-200 group-hover:text-signal [&_svg]:h-[18px] [&_svg]:w-[18px]"
               >
                 {modeIcon(o.mode)}
@@ -956,7 +951,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
                 </svg>
               </span>
             </button>
-          </motion.li>
+          </li>
         ))}
       </ul>
     </div>

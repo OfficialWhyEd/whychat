@@ -1,69 +1,72 @@
-# Stato WhyChat — audit completo richieste (rilettura messaggio per messaggio)
+# Stato WhyChat — audit STORICO completo (dall'inizio, 15→23 giugno)
 
-> Ricostruito rileggendo **ogni** messaggio della sessione dal transcript reale, non a memoria.
+> Ricostruito rileggendo **ogni** messaggio dai transcript reali di tutte le sessioni WhyChat
+> (20260615, 20260620, 20260621×2, sessione corrente). Non a memoria.
 > Aggiornato: 2026-06-23.
 
-**Legenda:** ✅ fatto · ⚠️ da verificare/parziale · ❌ NON fatto
+**Legenda:** ✅ fatto · ⚠️ parziale / da verificare a fondo · ❌ NON fatto
 
 ---
 
-## 1. OnlyType / sheet
-- ⚠️ **#6** — La chat in OnlyType deve poter **continuare** (non una risposta singola) e gli **artifacts** vanno visualizzati bene. → *Da verificare che sia una chat continuabile e non un singolo prompt→risposta.*
+## A. FONDAMENTA (sessioni 15–20 giugno)
 
-## 2. Upload file / allegati
-- ✅ **#8** — Simbolo **graffetta** al posto dell'immagine; ogni tipo di file importabile.
-- ✅ **#9** — Video caricabili **con anteprima**; **più file insieme**; tolta la scritta "WhyChat vede".
-- ✅ **#10** — Anteprima/chip per pdf/html/md/testo e altri file (FileChip).
-- ✅ **#12** — Mostrato il **nome file**; la **X** di rimozione non viene più tagliata (dentro l'angolo).
-- ✅ **#14** — Legge tutti i file: immagini, frame video, PDF, testo/codice.
-- ✅ **#15** — **ZIP** accettato e spacchettato; WhyChat sa di poterli maneggiare (behavior.ts).
+### Identità / intelligenza / modelli
+- ✅ WhyChat = "anima digitale" di WhyEd, chatbot tipo Claude su Pages + Cloudflare Worker.
+- ✅ Catena modelli con **fallback**: Groq (Llama 3.3) + più chiavi Groq, fallback a Gemini. Sempre una risposta disponibile.
+- ✅ **Deep thinking**: ragionamento mostrato (ReasoningPanel, shimmer).
+- ✅ **Reasoning adattivo**: Groq orchestra, decide quanto ragionare, **"Rispondi Ora"** dopo ~6-7s, risposta finale in parallelo al ragionamento.
+- ✅ **Memoria/identità/KV** per ogni utente anche senza nome + **bootstrap** stile openclaw (senza nominarlo). Usabile dal telefono in remoto.
+- ⚠️ **"Intelligente come Mythos/Fable", connesso al mondo, sa che ore sono, usa i tool in modo intelligente**: parziale — da rivedere la qualità delle risposte (→ task #15).
 
-## 3. Barra composer (la cosa più importante)
-- ✅ **#7** — Su mobile i toggle diventano solo-icona così invio non va a capo. ⚠️ *Da verificare dal vivo con cerca+plan aperti insieme su telefono stretto.*
-- ✅ **#13 / #29 / #30 / #32** — Icone rifatte (lucide qualità Claude), **allineate e simmetriche**, niente più scritta storta (PR #60, #61, #62).
-- ✅ **#29/#32** — Testo allineato all'icona MODALITÀ (parte più a destra) (PR #62). Misurato ≤0.5px.
-- ✅ **#34** — **Placeholder** allineato al cursore (prima il placeholder restava a sinistra) (PR #63).
-- ✅ **#30/#35** — Niente più **scatto post-animazione** del cerca; animazioni coerenti (PR #61).
-- ✅ **#29/#32** — **Animazioni tipo "Hello Apple"**: il simbolo MODALITÀ molleggia ad ogni cambio modalità (PR #62).
-- ✅ **#32** — Metodo reale per accorgersi se è storto: screenshot + **misure pixel** via puppeteer (non più "a occhio").
+### Modalità
+- ✅ Modalità multiple (Chat, Canvas, Deep, Apprendimento, OnlyType, Group, WhyEarth, WhyEntropy, WhyMusic, WhyEcosystem) con **icona modalità** e **chat salvata per modalità** nella sidebar.
+- ✅ **OnlyType**: chat continuabile, decide se usare solo Groq o anche il ragionamento.
+- ⚠️ **OnlyType (cuore originale)**: "disegni qualcosa + descrizione → lui CAPISCE il disegno e lo CREA (sito/SVG/equazione/idea di gioco)". All'inizio funzionava meglio. Da riverificare che il riconoscimento del disegno + creazione sia all'altezza. Animazione di uscita del foglio all'invio: da verificare.
+- ⚠️ **WhyEarth**: toggle voli/terremoti ci sono; ma "chat collegata al globo" (chiedi → punta il posto, immagini, zoom), togliere i pallini brutti, qualità mobile → **da sistemare** (beta).
+- ❌/⚠️ **WhyEntropy**: "ancora a caso" — da rendere significativo/funzionante.
+- ⚠️ **Group Prediction (stile Mirofish)**: agenti con personalità/parametri propri. **Ricerca online degli agenti in tempo reale: NON trovata** ❌. Agenti che discutono tra loro e decidono quale agente attivare: da verificare.
+- ⚠️ **WhyEcosystem**: simulazioni natura — da verificare stato.
+- ❌ **WhyMusic**: analisi/produzione traccia in profondità — solo UI, manca il motore audio reale (fuori scope attuale).
 
-## 4. Liquid glass (texture identica Apple)
-- ✅ **#38/#40** — Liquid glass **rimesso** sulla barra (l'avevo tolto: errore) con tecnica esistente, non da zero (PR #67).
-- ✅ — **Mappa-lente** (niente seam) + **aberrazione cromatica** RGB sul bordo (PR #68). Le particelle dietro si vedono e si rifrangono.
-- ⚠️ **#38** — "Letteralmente identico Apple": base fatta; manca eventuale **specular/glint** più marcato per spingerlo oltre (task #11). Da confermare se per te è già "identico".
+### Voce / effetti
+- ✅ **TTS Edge** `it-IT-ElsaNeural` (veloce, via Worker /api/tts + fallback browser).
+- ✅ **Bordo barra reattivo al TTS** (metallico) + **particelle reagiscono all'audio**.
+- ✅ Tasto voce automatica **solo in WhyMusic**; play per-messaggio ovunque.
+- ✅ **Jump-to-bottom** liquid glass metallico.
 
-## 5. Opener / schermata iniziale
-- ✅ **#35/#41** — La **scritta dei consigli** non viene più tagliata su mobile/tastiera (PR #69).
-- ✅ **#35** — Il sottotitolo non **rimbalza** più al cambio parola (resta fermo/solido) (PR #66).
-- ⚠️ **#35** — L'elemento del "quadrato rosso" che si muoveva: credo sia il sottotitolo (sistemato). *Da confermare con la tua immagine che è quello.*
-
-## 6. Tempo di risposta
-- ✅ **#35/#36** — Mostrato in **secondi esatti** non arrotondati (`0,72s`, `1,36s`) (PR #65).
-
-## 7. Memoria / identità / intelligenza
-- ✅ **#21** — KV usabile **dal telefono in remoto** in tempo reale (attivato e verificato cross-device).
-- ✅ **#22/#24** — Memoria per ogni utente **anche senza nome**; ricorda; **bootstrap** iniziale come "agente openclaw" senza nominarlo, con spiegazione dei vantaggi di WhyChat.
-- ✅ **#22** — **TTS**: niente più ripetizioni/sovrapposizioni; tasto voce solo in WhyMusic; play per-messaggio ovunque.
-- ✅ **#22** — Immagini **salvate e rivedibili**, contesto immagine mantenuto nei follow-up.
-- ⚠️ **#22/#24** — "Più intelligente, mantenere più contesto, non stupido" + studiare struttura **Claude Desktop/Mobile/browser** e replicarla: parziale, lavoro continuo (→ task #15).
-
-## 8. UI varie
-- ✅ **#19** — Simboli centrati con animazioni al trigger (composer + header + azioni chat).
-- ✅ **#24** — **Tessera tecnica** (ProtocolBadge in basso a sinistra) aggiornata e impeccabile.
-- ✅ **#24** — Skill **taste** usata per il voto estetico (9/10) + quick wins applicati.
-- ✅ **#16/#17/#32** — Uso dell'**MCP/API 21st.dev** e ricerca su internet/GitHub invece di reinventare (memoria salvata: [[feedback-riusa-codice-esistente]]).
-- ✅ **#16/#22** — Domande a **scelta multipla** cliccabili (`[[SCELTE:]]`).
+### UI storica
+- ✅ **Openers** simmetrici, sempre diversi, legati alle modalità.
+- ✅ **Error/404** centrato e curato (ErrorScreen).
+- ⚠️ **Logo / Wordmark "WhyChat"**: è il punto **più contestato** di sempre. Richiesto: font variabile (FPA Variable / `Loverine.otf`), effetto **scritta che si compone** (la linea scrive la parola, entra→si ferma→si riscrive), **ease in/out morbido Pixar**, titolo **vivo** (si muove/ingrandisce), mantenendo l'effetto attuale, "senza tagli di maschere strani". → **DA RIVERIFICARE E PROBABILMENTE RIFARE PER BENE.**
+- ⚠️ **Adattamento mobile/tablet**: storicamente "si sovrappone tutto"; nella chat normale da telefono alcune scritte si sovrappongono. Da riverificare ora.
+- ⚠️ **Tendine (dropdown)**: su mobile si chiudono troppo istantaneamente — serve animazione di chiusura.
+- ⚠️ **Azioni/tool visibili** (bash, websearch/webkimi) con design impeccabile "come un agente openclaw/Claude Code che fa vedere cosa fa": parziale.
 
 ---
 
-## ❌ COSE NON FATTE (da fare)
-1. ❌ **#28** — **Camuffare/offuscare il codice** e spostare il worker col "secret sauce" su repo **privato** (ottica imprenditoriale, non perderlo mai). → task #14
-2. ❌ **#30** — **Benchmark finale** vs altri assistenti (~30% del rimanente). → task #13
-3. ❌ **#38** — **Sidebar**: animazioni/effetti di apertura-chiusura. → task #12
-4. ❌ **#22/#24/#38** — **Migliorare il modello/risposte** finché non è "perfetto" + replicare struttura Claude Desktop/Mobile/browser. → task #15
+## B. SESSIONE CORRENTE (21–23 giugno) — già fatto
+- ✅ Allegati: graffetta, ogni file, video con anteprima, multi-file, ZIP spacchettato, nome file, X non tagliata.
+- ✅ Composer: icone lucide allineate/simmetriche, testo allineato a MODALITÀ, placeholder allineato al cursore, niente scatto post-animazione, animazioni "Hello Apple" (icona molleggia al cambio modalità), barra solida su telefono stretto.
+- ✅ **Liquid glass identico Apple**: mappa-lente (niente seam) + aberrazione cromatica + specular bordo alto. Particelle dietro si rifrangono.
+- ✅ Tempo di risposta in secondi esatti.
+- ✅ Tessera tecnica (ProtocolBadge) aggiornata; skill taste (voto 9/10).
+- ✅ Domande a scelta multipla cliccabili.
+- ✅ Sidebar: stagger d'entrata conversazioni.
+- ✅ **IP**: repo PRIVATO `whychat-core` col secret-sauce; rimosso dal repo pubblico a HEAD.
 
-## ⚠️ DA VERIFICARE (probabilmente fatto, ma confermare)
-- ⚠️ **#6** — OnlyType: chat **continuabile** + artifacts ben visualizzati. → nuovo task
-- ⚠️ **#7** — Su telefono stretto: cerca + plan + invio tutti **solidi** in riga. → nuovo task
-- ⚠️ **#35** — Qual è l'elemento esatto del **"quadrato rosso"** (serve immagine).
-- ⚠️ **#38** — Liquid glass "**identico** Apple": ti basta così o lo spingo (specular/aberrazione più forti)? → task #11
+---
+
+## ❌ DA FARE — lista operativa (priorità)
+1. ❌ **Opener STATICO** (#35 quadrato rosso): l'intro + i consigli sotto "WhyChat" non devono fare lo **slide** d'entrata, devono essere **statici**. → in lavorazione adesso.
+2. ❌ **Suggerimenti dinamici personalizzati** (in basso, "aiutami a iniziare…"): il primo generale, il secondo entra **dopo un ritardo** deciso da WhyChat in base alla persona; WhyChat decide **se** mostrarli.
+3. ⚠️ **Logo/Wordmark**: rifare l'effetto scritta-che-si-compone col font giusto, ease in/out, vivo, senza tagli.
+4. ⚠️ **WhyEarth**: chat↔globo (punta i luoghi, immagini, zoom), togliere pallini brutti, fix mobile.
+5. ⚠️ **WhyEntropy**: renderlo sensato/funzionante.
+6. ⚠️ **Group Prediction**: ricerca online degli agenti + discussione tra agenti.
+7. ⚠️ **OnlyType**: riconoscimento disegno→creazione; animazione uscita foglio; tendine chiusura mobile.
+8. ⚠️ **Mobile/tablet**: sovrapposizioni nella chat normale; tendine chiusura troppo istantanea.
+9. ❌ **Trademark / copyright / license / protocolli ufficiali** + offuscamento codice (oltre al repo privato già fatto) + **purge storia git pubblica** (force-push, serve OK).
+10. ❌ **Benchmark finale** vs altri assistenti.
+11. ⚠️ **Qualità modello/risposte** (come Mythos/Fable).
+
+> Nota: i punti ⚠️ vanno verificati uno per uno dal vivo prima di dichiararli fatti. Questo file è la fonte di verità: si aggiorna man mano.
