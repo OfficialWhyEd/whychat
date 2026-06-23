@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { relativeTime, type Chat } from "../lib/chats";
 import Logo from "./Logo";
 import { MODES, type Mode } from "./CommandComposer";
@@ -64,6 +65,11 @@ export default function Sidebar({
     label,
     items: sorted.filter((c) => sectionOf(c.ts) === label),
   })).filter((g) => g.items.length > 0);
+
+  // indice globale per lo stagger d'entrata delle righe all'apertura della sidebar
+  let _i = 0;
+  const orderIndex = new Map<string, number>();
+  groups.forEach((g) => g.items.forEach((c) => orderIndex.set(c.id, _i++)));
 
   return (
     <>
@@ -132,8 +138,16 @@ export default function Sidebar({
                     const isActive = c.id === activeId;
                     const isEditing = editing === c.id;
                     return (
-                      <div
+                      <motion.div
                         key={c.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={open ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 480,
+                          damping: 34,
+                          delay: open ? Math.min(orderIndex.get(c.id) ?? 0, 14) * 0.025 : 0,
+                        }}
                         className={`group relative flex items-center rounded-lg transition ${
                           isActive ? "bg-[rgba(201,75,37,0.14)]" : "hover:bg-[rgba(242,239,233,0.04)]"
                         }`}
@@ -214,7 +228,7 @@ export default function Sidebar({
                             </button>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
