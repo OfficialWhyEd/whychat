@@ -77,10 +77,13 @@ void main(){
   amb /= 3.0;
 
   // vetro limpido, frosted, trasparenza media (saturazione come rdev). NIENTE riflessi.
-  vec3 glass = col * 1.85 + amb * 0.4 + vec3(0.022,0.019,0.016);
-  glass = glass / (1.0 + glass*0.3);   // soft-knee leggero
+  // saturazione leggera del contenuto (come rdev: saturation ~1.4) per renderlo vivo
+  float lum = dot(col, vec3(0.299,0.587,0.114));
+  col = mix(vec3(lum), col, 1.35);
+  vec3 glass = col * 2.05 + amb * 0.35 + vec3(0.018,0.015,0.013);
+  glass = glass / (1.0 + glass*0.28);   // soft-knee leggero
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
-  gl_FragColor = vec4(glass, alpha*0.92);
+  gl_FragColor = vec4(glass, alpha*0.9);
 }
 `;
 
