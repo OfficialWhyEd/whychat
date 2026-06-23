@@ -244,7 +244,17 @@ function Chat() {
 
     const atts = attachments ?? [];
     // file che GEMINI legge davvero (immagini, frame video, PDF…): mandati come inlineData
-    const media = atts.map((a) => a.data).filter((x): x is string => !!x);
+    let media = atts.map((a) => a.data).filter((x): x is string => !!x);
+    // CONTESTO IMMAGINE: se non alleghi nulla ma lo scambio PRECEDENTE aveva
+    // un'immagine, la ri-includo → WhyChat continua a "vederla" nel follow-up
+    // (es. "e in alto a sinistra?"). Solo l'ultimo scambio, per non instradare a caso.
+    if (!media.length) {
+      const prev = existing?.messages ?? [];
+      const lastUser = [...prev].reverse().find((m) => m.role === "user");
+      const isRecent = lastUser ? prev.indexOf(lastUser) >= prev.length - 2 : false;
+      const recalled = isRecent ? lastUser?.image || lastUser?.attachments?.find((a) => a.image)?.image : undefined;
+      if (recalled) media = [recalled];
+    }
     // contenuto testuale dei file di testo (md/html/json/csv/codice) → nel prompt
     const textParts = atts.filter((a) => a.text).map((a) => `[Contenuto del file "${a.name}"]:\n${a.text}`);
     // solo i file NON leggibili (doc/xls/zip…) restano una nota col nome
