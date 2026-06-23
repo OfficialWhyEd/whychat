@@ -26,7 +26,19 @@ interface Activity {
 interface AdminData {
   visitors: Visitor[];
   recent: Activity[];
-  stats: { visitors: number; logs: number };
+  stats: {
+    visitors: number;
+    named?: number;
+    logs: number;
+    messages?: number;
+    byMode?: Record<string, number>;
+    byCountry?: Record<string, number>;
+  };
+}
+interface Profile {
+  name: string | null;
+  summary: string;
+  tags: string[];
 }
 
 const PASS_KEY = "whychat_admin_pass";
@@ -48,6 +60,27 @@ export default function AdminDashboard() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<Record<string, Profile | "loading">>({});
+
+  const loadProfile = useCallback(
+    async (id: string, p: string) => {
+      setProfiles((m) => ({ ...m, [id]: "loading" }));
+      try {
+        const res = await fetch(`${WORKER_URL}/api/admin/profile?pass=${encodeURIComponent(p)}&id=${encodeURIComponent(id)}`);
+        const j = (await res.json()) as Profile;
+        setProfiles((m) => ({ ...m, [id]: j }));
+      } catch {
+        setProfiles((m) => ({ ...m, [id]: { name: null, summary: "(analisi non disponibile)", tags: [] } }));
+      }
+    },
+    [],
+  );
+
+  const toggle = (id: string) => {
+    const next = open === id ? null : id;
+    setOpen(next);
+    if (next && !profiles[next]) loadProfile(next, pass);
+  };
 
   const load = useCallback(async (p: string) => {
     if (!p) return;
@@ -153,16 +186,35 @@ export default function AdminDashboard() {
         </header>
 
         {/* stats */}
-        <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="mb-3 grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] p-4">
             <div className="text-3xl font-semibold tabular-nums">{data.stats.visitors}</div>
             <div className="mono text-[0.55rem] uppercase tracking-wider text-faint">Persone</div>
+            {data.stats.named != null && (
+              <div className="mono mt-0.5 text-[0.5rem] text-ember/80">{data.stats.named} con nome</div>
+            )}
           </div>
           <div className="rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] p-4">
-            <div className="text-3xl font-semibold tabular-nums">{data.stats.logs}</div>
-            <div className="mono text-[0.55rem] uppercase tracking-wider text-faint">Conversazioni</div>
+            <div className="text-3xl font-semibold tabular-nums">{data.stats.messages ?? data.stats.logs}</div>
+            <div className="mono text-[0.55rem] uppercase tracking-wider text-faint">Messaggi</div>
+          </div>
+          <div className="rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] p-4">
+            <div className="text-3xl font-semibold tabular-nums">{Object.keys(data.stats.byCountry ?? {}).length || "—"}</div>
+            <div className="mono text-[0.55rem] uppercase tracking-wider text-faint">Paesi</div>
           </div>
         </div>
+        {/* ripartizione per modalità */}
+        {data.stats.byMode && Object.keys(data.stats.byMode).length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-1.5">
+            {Object.entries(data.stats.byMode)
+              .sort((a, b) => b[1] - a[1])
+              .map(([m, n]) => (
+                <span key={m} className="mono rounded-full border border-[var(--color-line2)] px-2.5 py-1 text-[0.55rem] text-dim">
+                  {m} <span className="text-faint">·</span> <span className="text-ember">{n}</span>
+                </span>
+              ))}
+          </div>
+        )}
 
         {/* visitatori */}
         <h2 className="mono mb-2 text-[0.6rem] uppercase tracking-wider text-faint">Utenti</h2>
@@ -171,7 +223,7 @@ export default function AdminDashboard() {
           {data.visitors.map((v) => (
             <div key={v.id} className="rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)]">
               <button
-                onClick={() => setOpen(open === v.id ? null : v.id)}
+                onClick={() => toggle(v.id)}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left"
               >
                 <span
@@ -194,6 +246,31 @@ export default function AdminDashboard() {
               </button>
               {open === v.id && (
                 <div className="border-t border-[var(--color-line)] px-4 py-3">
+                  {/* PROFILO AI: l'AI deduce chi è dalle frasi */}
+                  <div className="mb-3 rounded-xl border border-signal/25 bg-[rgba(201,75,37,0.06)] p-3">
+                    <div className="mono mb-1 text-[0.5rem] uppercase tracking-wider text-ember/80">Analisi AI</div>
+                    {profiles[v.id] === "loading" || !profiles[v.id] ? (
+                      <p className="text-[0.8rem] text-faint">Analizzo le conversazioni…</p>
+                    ) : (
+                      <>
+                        {(profiles[v.id] as Profile).name && !v.name && (
+                          <p className="mb-1 text-[0.85rem] text-paper">
+                            Probabile nome: <span className="font-semibold text-ember">{(profiles[v.id] as Profile).name}</span>
+                          </p>
+                        )}
+                        <p className="text-[0.84rem] leading-snug text-dim">{(profiles[v.id] as Profile).summary}</p>
+                        {(profiles[v.id] as Profile).tags.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {(profiles[v.id] as Profile).tags.map((t, i) => (
+                              <span key={i} className="mono rounded-full bg-[rgba(242,239,233,0.06)] px-2 py-0.5 text-[0.5rem] text-dim">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                   {v.notes.length === 0 ? (
                     <p className="text-[0.8rem] text-faint">Nessuna nota.</p>
                   ) : (
