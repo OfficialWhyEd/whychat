@@ -235,6 +235,7 @@ function Chat() {
   const send = async (text: string, attachments?: Attachment[], modeOverride?: Mode) => {
     if (streaming) return;
     setError("");
+    const t0 = Date.now(); // per misurare quanto ci mette a rispondere
     const existing = chats.find((c) => c.id === activeId);
     // Una chat è LEGATA alla modalità in cui è nata: i messaggi successivi
     // restano in quella modalità anche se il menu globale è cambiato. Solo
@@ -503,6 +504,17 @@ function Chat() {
     } finally {
       setStreaming(false);
       abortRef.current = null;
+      // tempo impiegato per la risposta (mostrato sotto: "Xs" / "X min")
+      const elapsed = Date.now() - t0;
+      setChats((prev) => {
+        const next = prev.map((c) =>
+          c.id === id
+            ? { ...c, messages: c.messages.map((m) => (m.id === aiMsg.id ? { ...m, duration: elapsed } : m)) }
+            : c,
+        );
+        saveChats(next);
+        return next;
+      });
     }
   };
 
