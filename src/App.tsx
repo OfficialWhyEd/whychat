@@ -188,8 +188,11 @@ function Chat() {
   useEffect(() => {
     atBottomRef.current = true;
     setAtBottom(true);
+    // se è la schermata iniziale (opener), NON scrollare in basso: altrimenti su
+    // schermi corti (tastiera aperta) la scritta dei consigli sparisce in alto.
+    if (messages.length === 0) return;
     requestAnimationFrame(() => scrollToBottom("auto"));
-  }, [activeId, scrollToBottom]);
+  }, [activeId, scrollToBottom, messages.length]);
 
   // Salva/aggiorna la sessione gruppo nelle conversazioni (upsert su id stabile).
   const persistGroup = useCallback((s: GroupSession) => {
@@ -905,7 +908,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
   return (
     <div className="rise flex flex-col items-center text-center">
       {/* spazio dove le particelle compongono il nome/benvenuto (sfondo) */}
-      <div style={{ height: "clamp(170px, 28vh, 260px)" }} />
+      <div style={{ height: "clamp(110px, 24vh, 260px)" }} />
 
       <p className="max-w-md text-balance px-3 text-[1.08rem] leading-relaxed text-paper/90 sm:px-0 sm:text-[1.18rem]">
         L'anima digitale di WhyEd: la sua coscienza, il suo modo di{" "}
