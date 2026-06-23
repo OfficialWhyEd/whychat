@@ -619,7 +619,8 @@ function Chat() {
             </AnimatedIcon>
           </button>
           <ModelSelector model={model} onModel={setModel} />
-          {ttsSupported() && (
+          {/* tasto voce automatica: SOLO in WhyMusic (il play per-messaggio resta ovunque) */}
+          {ttsSupported() && music && (
             <button
               onClick={() => {
                 const next = !autoTts;
@@ -628,7 +629,7 @@ function Chat() {
               }}
               title={autoTts ? "Voce automatica attiva" : "Voce automatica disattivata"}
               aria-pressed={autoTts}
-              className={`ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition ${
                 autoTts
                   ? "border-ember/50 text-ember"
                   : "border-[var(--color-line2)] text-faint hover:text-paper"
@@ -651,7 +652,7 @@ function Chat() {
           )}
           <button
             onClick={askName}
-            className="mono max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
+            className="mono ml-auto max-w-[120px] shrink-0 truncate rounded-full border border-[var(--color-line2)] px-3 py-1.5 text-[0.55rem] text-faint transition hover:text-dim"
           >
             {name ? `↳ ${name}` : "PRESENTATI"}
           </button>
