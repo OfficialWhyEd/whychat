@@ -83,14 +83,17 @@ void main(){
   }
   col /= wsum;
 
-  // velo di vetro minimo (caldo, scuro) — NIENTE riflessi
+  // contenuto rifratto = il vetro è LIMPIDO (vedi attraverso), frosted cremoso.
+  // più luminoso e meno torbido. NIENTE riflessi.
   float h = hgt(p,b,uRadius,uBevel);
-  vec3 glass = col * 1.35 + vec3(0.05,0.041,0.034);
-  // tint sottilissimo sulla superficie piatta (centro), come Apple — non sui bordi
-  glass = mix(glass, glass + vec3(0.06,0.06,0.07), h*0.12);
+  vec3 glass = col * 1.85 + vec3(0.035,0.03,0.026);
+  // soft-knee per non bruciare i punti più luminosi (vetro morbido, non sgranato)
+  glass = glass / (1.0 + glass*0.45);
+  // velo freddo impercettibile sulla superficie piatta (centro) — vetro, non glow
+  glass = mix(glass, glass + vec3(0.05,0.055,0.07), h*0.10);
 
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
-  gl_FragColor = vec4(glass, alpha*0.95);
+  gl_FragColor = vec4(glass, alpha*0.94);
 }
 `;
 
