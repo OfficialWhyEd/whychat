@@ -71,19 +71,26 @@ void main(){
     }
   }
   refr /= wsum;
-  // vetro scuro caldo + particelle rifratte e sfocate (luminose sul nero)
-  vec3 glass = vec3(0.07, 0.05, 0.038);
-  glass += refr * (1.25 + lens * 0.9);
-  // riflesso specular sul bordo (luce dall'alto-sinistra)
-  vec2 L = normalize(vec2(-0.55, -0.83));
-  float spec = pow(max(dot(g, L), 0.0), 2.2) * edge;
-  glass += vec3(1.0, 0.97, 0.92) * spec * 0.45;
-  // sottile riga di luce proprio sul bordo
-  float rim = (1.0 - smoothstep(0.0, 2.0, abs(d))) * 0.5;
-  glass += vec3(0.85, 0.88, 0.95) * rim;
+  // contenuto rifratto e sfocato = la luce vera dentro al vetro (più luminoso,
+  // e sul bordo la lente CONCENTRA la luce → più chiaro = look Apple)
+  vec3 glass = refr * (1.55 + lens * 1.7);
+  // velo di vetro minimo (caldo) — il vetro non è mai nero pieno
+  glass += vec3(0.055, 0.045, 0.038);
+  // gradiente: vetro illuminato dall'alto (sottile)
+  float topGrad = 1.0 - (px.y / uSize.y);
+  glass += vec3(0.10, 0.10, 0.115) * topGrad * topGrad * 0.5;
+  // banda-lente luminosa proprio sul bordo (rifrazione che illumina il rim)
+  glass += vec3(0.92, 0.94, 1.0) * pow(edge, 2.5) * 0.18;
+  // riflesso specular NETTO sul bordo alto (luce dall'alto)
+  vec2 L = normalize(vec2(-0.35, -0.94));
+  float spec = pow(max(dot(g, L), 0.0), 3.0) * edge;
+  glass += vec3(1.0, 0.98, 0.95) * spec * 0.85;
+  // riga di luce sottilissima e crisp sul contorno (vetro che taglia la luce)
+  float rim = (1.0 - smoothstep(0.0, 1.6, abs(d)));
+  glass += vec3(1.0, 1.0, 1.0) * rim * 0.6;
   // alpha = dentro la forma (angoli arrotondati, antialias)
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
-  gl_FragColor = vec4(glass, alpha * 0.97);
+  gl_FragColor = vec4(glass, alpha * 0.95);
 }
 `;
 
