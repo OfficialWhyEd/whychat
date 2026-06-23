@@ -777,6 +777,7 @@ function Chat() {
                           prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
                           onOpenArtifact={openArtifact}
                           onRespondNow={m.id === reasoningId ? respondNow : undefined}
+                          onChoice={(t) => send(t)}
                           onRetry={
                             m.role === "assistant" && !streaming
                               ? () => {
