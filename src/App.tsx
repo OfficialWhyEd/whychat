@@ -941,7 +941,7 @@ function Hero({ onPick }: { onPick: (t: string, m?: Mode) => void }) {
               <span className="min-w-0 flex-1 truncate text-[0.92rem] text-dim transition-colors duration-200 group-hover:text-paper">
                 {o.text}
               </span>
-              <span className="mono shrink-0 text-[0.5rem] uppercase tracking-wider text-faint/60 transition-colors duration-200 group-hover:text-ember">
+              <span className="mono shrink-0 text-[0.52rem] uppercase tracking-wider text-dim/75 transition-colors duration-200 group-hover:text-ember">
                 {MODE_SHORT[o.mode]}
               </span>
               <span
