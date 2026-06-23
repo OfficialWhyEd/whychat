@@ -430,7 +430,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               "0 0 calc(var(--tts,0) * 46px) calc(var(--tts,0) * 8px) rgba(240,163,106,calc(var(--tts,0) * 0.5)), inset 0 0 calc(var(--tts,0) * 22px) rgba(201,75,37,calc(var(--tts,0) * 0.35))",
           }}
         />
-      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={16} />}
+      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={20} aberration={3.5} />}
       <div
         ref={glassRef}
         style={{

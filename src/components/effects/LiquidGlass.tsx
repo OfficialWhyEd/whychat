@@ -72,11 +72,13 @@ export function LiquidGlassFilter({
   width,
   height,
   scale = 14,
+  aberration = 3,
 }: {
   id: string;
   width: number;
   height: number;
   scale?: number;
+  aberration?: number; // separazione R/B sul bordo (frangia arcobaleno Apple)
 }) {
   // mappa rigenerata solo quando cambia la dimensione (cap a 360px: il campo è
   // liscio, feImage la riscala senza artefatti → meno lavoro per la CPU)
@@ -88,11 +90,25 @@ export function LiquidGlassFilter({
   }, [width, height]);
 
   if (!href) return null;
+  // ABERRAZIONE CROMATICA (identica Apple): ogni canale viene rifratto con una
+  // scala leggermente diversa (R più, B meno) e poi ricomposto in "screen". Sui
+  // bordi — dove il displacement è forte — i canali si separano → frangia
+  // iridescente, esattamente come il vetro liquido di iOS 26.
+  const keepR = "1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0";
+  const keepG = "0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0";
+  const keepB = "0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0";
   return (
     <svg aria-hidden width="0" height="0" style={{ position: "absolute", pointerEvents: "none" }}>
       <filter id={id} colorInterpolationFilters="sRGB" x="0" y="0" width="100%" height="100%">
         <feImage href={href} x="0" y="0" width={width} height={height} preserveAspectRatio="none" result="map" />
-        <feDisplacementMap in="SourceGraphic" in2="map" scale={scale} xChannelSelector="R" yChannelSelector="G" />
+        <feDisplacementMap in="SourceGraphic" in2="map" scale={scale + aberration} xChannelSelector="R" yChannelSelector="G" result="dR" />
+        <feColorMatrix in="dR" type="matrix" values={keepR} result="cR" />
+        <feDisplacementMap in="SourceGraphic" in2="map" scale={scale} xChannelSelector="R" yChannelSelector="G" result="dG" />
+        <feColorMatrix in="dG" type="matrix" values={keepG} result="cG" />
+        <feDisplacementMap in="SourceGraphic" in2="map" scale={scale - aberration} xChannelSelector="R" yChannelSelector="G" result="dB" />
+        <feColorMatrix in="dB" type="matrix" values={keepB} result="cB" />
+        <feBlend in="cR" in2="cG" mode="screen" result="rg" />
+        <feBlend in="rg" in2="cB" mode="screen" />
       </filter>
     </svg>
   );
