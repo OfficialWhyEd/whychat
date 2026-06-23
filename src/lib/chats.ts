@@ -27,18 +27,36 @@ export function loadChats(): Chat[] {
 }
 
 export function saveChats(chats: Chat[]) {
+  // tieni le ultime 50, pulisci i flag transitori (streaming) ma CONSERVA
+  // ragionamento (thoughts) E le immagini/allegati → non si perdono più al reload.
+  const clean = chats.slice(0, 50).map((c) => ({
+    ...c,
+    messages: c.messages.map((m) => {
+      const base: Message = { id: m.id, role: m.role, content: m.content };
+      if (m.thoughts) base.thoughts = m.thoughts;
+      if (m.image) base.image = m.image;
+      if (m.attachments?.length) base.attachments = m.attachments;
+      return base;
+    }),
+  }));
   try {
-    // tieni le ultime 50, pulisci i flag transitori (streaming) ma CONSERVA il
-    // ragionamento del deep thinking (thoughts) così resta dopo un reload
-    const clean = chats.slice(0, 50).map((c) => ({
-      ...c,
-      messages: c.messages.map(({ id, role, content, thoughts }) =>
-        thoughts ? { id, role, content, thoughts } : { id, role, content },
-      ),
-    }));
     localStorage.setItem(LS_KEY, JSON.stringify(clean));
   } catch {
-    /* quota piena o storage off: la chat resta comunque in memoria */
+    // quota piena (le immagini pesano): ripiega salvando SENZA i dataURL, così
+    // testo, nomi file e ragionamento restano — meglio che perdere tutto.
+    try {
+      const light = clean.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) => {
+          const { image: _img, attachments, ...rest } = m;
+          void _img;
+          return { ...rest, attachments: attachments?.map((a) => ({ name: a.name, kind: a.kind })) };
+        }),
+      }));
+      localStorage.setItem(LS_KEY, JSON.stringify(light));
+    } catch {
+      /* storage off: la chat resta in memoria */
+    }
   }
 }
 
