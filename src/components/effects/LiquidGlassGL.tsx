@@ -94,9 +94,9 @@ void main(){
 
   // contenuto rifratto = vetro LIMPIDO (vedi attraverso), frosted cremoso, trasp. media
   float h = hgt(p,b,uRadius,uBevel);
-  vec3 glass = col * 1.8 + amb * 0.5 + vec3(0.03,0.026,0.022);
-  // soft-knee per non bruciare i picchi (vetro morbido, non sgranato)
-  glass = glass / (1.0 + glass*0.5);
+  vec3 glass = col * 1.85 + amb * 0.4 + vec3(0.022,0.019,0.016);
+  // soft-knee leggero (più contrasto, meno torbido)
+  glass = glass / (1.0 + glass*0.3);
   // velo freddo impercettibile sulla superficie piatta (centro) — vetro, non glow
   glass = mix(glass, glass + vec3(0.05,0.055,0.07), h*0.10);
 

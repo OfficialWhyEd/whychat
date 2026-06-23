@@ -414,7 +414,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
       <div ref={barRef} className="relative isolate" style={{ "--tts": "0" } as React.CSSProperties}>
         {/* VETRO WEBGL: campiona le particelle dietro e le rifrange (rifrazione vera, niente riflessi) */}
-        {glOn && <LiquidGlassGL className="z-0" radius={26} bevel={28} ior={1.5} thick={56} aberration={0.16} blur={2.4} />}
+        {glOn && <LiquidGlassGL className="z-0" radius={26} bevel={16} ior={1.5} thick={88} aberration={0.3} blur={2.2} />}
         {/* solo un contorno sottile per definire il bordo + leggera ombra sotto per
             profondità. NESSUN riflesso bianco (la rifrazione la fa il WebGL). */}
         <div
