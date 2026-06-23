@@ -20,6 +20,7 @@ import ArtifactPanel, { type ArtifactData } from "./components/ArtifactPanel";
 import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
+import AdminDashboard from "./components/AdminDashboard";
 import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, type ChatMessage as ApiMsg } from "./lib/api";
 
 // Adaptive reasoning: domanda "impegnativa" → WhyChat ragiona da solo (poi puoi
@@ -74,6 +75,7 @@ export default function App() {
   }, []);
   if (route === "#vault") return <Vault />;
   if (route === "#dashboard") return <Dashboard />;
+  if (route === "#admin") return <AdminDashboard />;
   if (route === "#dreams") return <Dreams />;
   return <Chat />;
 }
