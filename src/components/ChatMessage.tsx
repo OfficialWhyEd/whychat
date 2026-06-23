@@ -11,6 +11,18 @@ import ReasoningPanel from "./ReasoningPanel";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
 import type { PlanStepData } from "../lib/api";
 
+// WhyChat può proporre SCELTE rapide cliccabili: [[SCELTE: a | b | c]]
+const CHOICES_RE = /\[\[\s*SCELTE\s*:\s*([^\]]+?)\s*\]\]/i;
+function extractChoices(text: string): string[] {
+  const m = CHOICES_RE.exec(text);
+  if (!m) return [];
+  return m[1]
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
 // tag tool → etichetta breve nella timeline (stile openclaw/Claude Code)
 const TOOL_LABEL: Record<string, string> = {
   analisi: "analisi",
@@ -101,12 +113,14 @@ export default function ChatMessage({
   prompt = "",
   onOpenArtifact,
   onRespondNow,
+  onChoice,
 }: {
   msg: Message;
   onRetry?: () => void;
   prompt?: string; // la domanda che ha generato questa risposta → tema del ragionamento
   onOpenArtifact?: (title: string, html: string) => void; // apri l'artifact nel pannello laterale
   onRespondNow?: () => void; // adaptive reasoning: salta il ragionamento e rispondi ora
+  onChoice?: (text: string) => void; // l'utente clicca una scelta proposta → la invia
 }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
@@ -271,7 +285,7 @@ export default function ChatMessage({
             onMouseMove={linkHandlers.onMouseMove}
             onMouseOut={linkHandlers.onMouseOut}
           >
-            {parseSegments(msg.content || "").map((seg, i) =>
+            {parseSegments((msg.content || "").replace(CHOICES_RE, "").trimEnd()).map((seg, i) =>
               seg.type === "artifact" ? (
                 <Artifact key={i} title={seg.title} html={seg.html} building={seg.building} onOpen={onOpenArtifact} />
               ) : (
@@ -284,6 +298,24 @@ export default function ChatMessage({
             )}
             {msg.streaming && <span className="caret" />}
             {linkPrev && <LinkPreviewCard href={linkPrev.href} x={linkPrev.x} y={linkPrev.y} />}
+          </div>
+        )}
+
+        {/* SCELTE rapide proposte da WhyChat → bottoni cliccabili (iniziativa) */}
+        {!msg.streaming && onChoice && extractChoices(msg.content).length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {extractChoices(msg.content).map((c, i) => (
+              <button
+                key={i}
+                onClick={() => onChoice(c)}
+                className="group flex items-center gap-1.5 rounded-full border border-signal/35 bg-[rgba(201,75,37,0.08)] px-3 py-1.5 text-[0.78rem] text-dim transition hover:border-signal/60 hover:bg-[rgba(201,75,37,0.16)] hover:text-paper"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="shrink-0 text-ember opacity-70 transition group-hover:opacity-100">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {c}
+              </button>
+            ))}
           </div>
         )}
 

@@ -58,6 +58,7 @@ function clean(text: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/[*_#>~]/g, "")
     .replace(/\[\[LUOGO:[^\]]*\]\]/gi, "")
+    .replace(/\[\[\s*SCELTE\s*:[^\]]*\]\]/gi, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 4096);
