@@ -70,6 +70,10 @@ let freq: Uint8Array<ArrayBuffer> | null = null;
 let curAudio: HTMLAudioElement | null = null;
 let curUrl: string | null = null;
 let meterRaf = 0;
+// token di generazione: ogni speak() lo incrementa. Una richiesta async vecchia
+// (es. edge ancora in volo) che risolve DOPO un nuovo speak/stop viene scartata
+// → niente più "parte più volte" o voci sovrapposte.
+let speakGen = 0;
 const sourced = new WeakSet<HTMLMediaElement>();
 
 function ensureContext(audio: HTMLAudioElement) {
@@ -109,8 +113,9 @@ function meter() {
 }
 
 // Riproduce bytes MP3 con AnalyserNode (ampiezza reale → reattività particelle)
-async function playBytes(bytes: ArrayBuffer, onState?: (s: boolean) => void): Promise<void> {
+async function playBytes(bytes: ArrayBuffer, gen: number, onState?: (s: boolean) => void): Promise<void> {
   if (!bytes.byteLength) throw new Error("audio vuoto");
+  if (gen !== speakGen) return; // un nuovo speak/stop è arrivato nel frattempo → scarta
   const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
   const audio = new Audio(url);
   audio.preload = "auto";
@@ -304,29 +309,33 @@ export function speak(text: string, onState?: (speaking: boolean) => void): bool
   if (!ttsSupported()) return false;
   const body = clean(text);
   if (!body) return false;
-  stop();
+  stop(); // (incrementa speakGen)
+  const gen = ++speakGen; // questa è la generazione "corrente"
   // 1) Edge/Elsa direttamente dal browser (IP di casa, gratis come OpenClaw)
   // 2) worker /api/tts (tenta Edge da server, poi Google IT)
   // 3) Web Speech del browser (offline)
   (async () => {
     try {
-      await playBytes(await edgeBrowserBytes(body), onState);
+      await playBytes(await edgeBrowserBytes(body), gen, onState);
       return;
     } catch {
       /* Edge dal browser non disponibile → worker */
     }
+    if (gen !== speakGen) return; // arrivato un nuovo speak/stop → fermati
     try {
-      await playBytes(await workerBytes(body), onState);
+      await playBytes(await workerBytes(body), gen, onState);
       return;
     } catch {
       /* worker non disponibile → voce di sistema */
     }
+    if (gen !== speakGen) return;
     speakWebSpeech(body, onState);
   })();
   return true;
 }
 
 export function stop() {
+  speakGen++; // invalida qualsiasi sintesi async ancora in volo
   if (curAudio) {
     try {
       curAudio.pause();
