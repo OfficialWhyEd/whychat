@@ -309,6 +309,51 @@ async function logTurn(
     whychat: assistantText.slice(0, 2000),
   };
   await env.MEMORY.put(key, JSON.stringify(entry), { expirationTtl: LOG_TTL_S });
+
+  // ── MEMORIA PER-UTENTE (riassunto rotolante) ───────────────────────────────
+  // Condivisa per NOME tra i dispositivi: stesso nome su telefono e desktop →
+  // stessa memoria, in tempo reale (KV sull'edge globale). Così WhyChat ti
+  // riconosce ovunque. Senza nome, è legata al dispositivo (visitorId).
+  try {
+    const mid = memId(visitorId, name);
+    const prevRaw = await env.MEMORY.get(`mem:${mid}`);
+    const m: { name: string | null; notes: string[]; count: number; lastSeen: string } = prevRaw
+      ? JSON.parse(prevRaw)
+      : { name: name || null, notes: [], count: 0, lastSeen: ts };
+    if (name && !m.name) m.name = name;
+    m.count = (m.count || 0) + 1;
+    m.lastSeen = ts;
+    const note = userMessage.trim();
+    if (note && !note.startsWith("[")) {
+      m.notes.push(note.slice(0, 160));
+      if (m.notes.length > 14) m.notes = m.notes.slice(-14);
+    }
+    await env.MEMORY.put(`mem:${mid}`, JSON.stringify(m), { expirationTtl: LOG_TTL_S });
+  } catch {
+    /* memoria best-effort: se fallisce, la chat continua */
+  }
+}
+
+// chiave memoria: per NOME (condivisa fra dispositivi) se c'è, altrimenti per dispositivo
+function memId(visitorId: string, name: string): string {
+  const n = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return n ? `n:${n.slice(0, 40)}` : `v:${visitorId}`;
+}
+
+// recall: legge la memoria per-utente e la rende un addendum per il system prompt
+async function recallMemory(env: Env, visitorId: string, name: string): Promise<string> {
+  if (!env.MEMORY) return "";
+  try {
+    const raw = await env.MEMORY.get(`mem:${memId(visitorId, name)}`);
+    if (!raw) return "";
+    const d = JSON.parse(raw) as { name?: string | null; notes?: string[]; count?: number };
+    if (!d.notes?.length) return "";
+    const who = d.name || "questa persona";
+    const recent = d.notes.slice(-6).join(" · ");
+    return `\n\n[MEMORIA — cosa ricordi di ${who} da scambi precedenti (${d.count ?? d.notes.length} in tutto): ${recent}. Se pertinente, usa questi ricordi con naturalezza — come qualcuno che si ricorda davvero di te — senza elencarli meccanicamente né dire "secondo la mia memoria".]`;
+  } catch {
+    return "";
+  }
 }
 
 // ── /api/chat — Groq streaming (SSE) con tee verso la memoria ─────────────────
@@ -429,12 +474,15 @@ async function handleChat(req: Request, env: Env, ctx: ExecutionContext): Promis
 
   // ricerca web: toggle utente OPPURE auto se la domanda chiede info dal mondo
   const webCtx = (body.search || needsLiveInfo(lastUser)) ? await liveSearch(lastUser) : "";
+  // memoria per-utente: cosa WhyChat già ricorda di questa persona (cross-device per nome)
+  const memCtx = await recallMemory(env, visitorId, name);
 
   const systemText =
     SOUL +
     BEHAVIOR +
     nowContext() +
     (name ? `\n\n[La persona con cui parli si chiama: ${name}]` : "") +
+    memCtx +
     modeHint +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— se utili, usali e cita i fatti con naturalezza; non inventare.]` : "");
 
@@ -644,7 +692,8 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
   const visitorId = String(body.visitorId ?? "anon").slice(0, 64);
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const modeHint = MODE_HINTS[String(body.mode ?? "chat")] ?? "";
-  const systemText = SOUL + BEHAVIOR + nowContext() + (name ? `\n\n[Parli con: ${name}]` : "") + modeHint;
+  const memCtx = await recallMemory(env, visitorId, name);
+  const systemText = SOUL + BEHAVIOR + nowContext() + (name ? `\n\n[Parli con: ${name}]` : "") + memCtx + modeHint;
   const rot = reasonRot++;
 
   const encoder = new TextEncoder();
@@ -928,9 +977,11 @@ async function handleThink(req: Request, env: Env, ctx: ExecutionContext): Promi
 
   // pensiero profondo connesso al mondo: ora reale + ricerca se serve
   const webCtx = needsLiveInfo(lastUser) ? await liveSearch(lastUser) : "";
+  const memCtx = await recallMemory(env, visitorId, name);
   const thinkSystem =
     SOUL + BEHAVIOR + nowContext() +
     (name ? `\n\n[Parli con: ${name}]` : "") +
+    memCtx +
     (webCtx ? `\n\n[RICERCHE ONLINE per "${lastUser.slice(0, 80)}":\n${webCtx}\n— ragiona su questi fatti reali, citali con naturalezza; non inventare.]` : "");
 
   const payloadBase = {
