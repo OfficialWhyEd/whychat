@@ -346,6 +346,7 @@ export default function SoulParticles({
     <canvas
       ref={canvasRef}
       aria-hidden
+      data-bg-particles
       className="pointer-events-none absolute inset-0"
       style={{ width: "100%", height: "100%", zIndex: 0, mixBlendMode: "screen" }}
     />
