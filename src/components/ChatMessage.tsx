@@ -108,15 +108,19 @@ export interface Message {
   duration?: number; // ms impiegati per la risposta → "Xs" / "X min"
 }
 
-// formatta una durata in modo umano: 0.4s · 12s · 3 min · 1h 5m
+// formatta una durata in modo PRECISO (niente arrotondamenti grossolani):
+//  • sotto 1s → millisecondi esatti: "436ms"
+//  • 1s–60s  → secondi con 2 decimali, virgola IT: "1,36s"
+//  • minuti  → "2 min 04s"  · ore → "1h 05m"
 function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   const s = ms / 1000;
-  if (s < 1) return `${s.toFixed(1)}s`;
-  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 60) return `${s.toFixed(2).replace(".", ",")}s`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min`;
+  const rem = Math.floor(s % 60);
+  if (m < 60) return `${m} min ${String(rem).padStart(2, "0")}s`;
   const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
+  return `${h}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
 export default function ChatMessage({
