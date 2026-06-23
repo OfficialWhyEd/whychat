@@ -71,23 +71,29 @@ void main(){
     }
   }
   refr /= wsum;
-  // contenuto rifratto e sfocato = la luce vera dentro al vetro (più luminoso,
-  // e sul bordo la lente CONCENTRA la luce → più chiaro = look Apple)
-  vec3 glass = refr * (1.55 + lens * 1.7);
+  // direzione del bordo: up=1 sul bordo ALTO, down=1 sul bordo BASSO
+  // (in coord schermo y cresce in basso, quindi g.y<0 = normale verso l'alto)
+  float up = clamp(g.y, 0.0, 1.0);
+  float down = clamp(-g.y, 0.0, 1.0);
+  // contenuto rifratto e sfocato = la luce vera dentro al vetro
+  vec3 glass = refr * (1.55 + lens * 1.5);
   // velo di vetro minimo (caldo) — il vetro non è mai nero pieno
-  glass += vec3(0.055, 0.045, 0.038);
+  glass += vec3(0.05, 0.042, 0.036);
   // gradiente: vetro illuminato dall'alto (sottile)
-  float topGrad = 1.0 - (px.y / uSize.y);
-  glass += vec3(0.10, 0.10, 0.115) * topGrad * topGrad * 0.5;
-  // banda-lente luminosa proprio sul bordo (rifrazione che illumina il rim)
-  glass += vec3(0.92, 0.94, 1.0) * pow(edge, 2.5) * 0.18;
+  float topGrad = px.y / uSize.y; // px.y è alto in CIMA (asse y-up dello shader)
+  glass += vec3(0.09, 0.09, 0.105) * topGrad * topGrad * 0.45;
+  // banda-lente luminosa: forte sul bordo ALTO, quasi nulla in basso
+  glass += vec3(0.92, 0.94, 1.0) * pow(edge, 2.5) * mix(0.03, 0.22, up);
   // riflesso specular NETTO sul bordo alto (luce dall'alto)
-  vec2 L = normalize(vec2(-0.35, -0.94));
-  float spec = pow(max(dot(g, L), 0.0), 3.0) * edge;
-  glass += vec3(1.0, 0.98, 0.95) * spec * 0.85;
-  // riga di luce sottilissima e crisp sul contorno (vetro che taglia la luce)
+  vec2 L = normalize(vec2(-0.30, 0.95));
+  float spec = pow(max(dot(g, L), 0.0), 3.2) * edge;
+  glass += vec3(1.0, 0.98, 0.95) * spec * 0.9;
+  // riga di luce crisp sul contorno: forte in alto, spenta in basso
   float rim = (1.0 - smoothstep(0.0, 1.6, abs(d)));
-  glass += vec3(1.0, 1.0, 1.0) * rim * 0.6;
+  glass += vec3(1.0, 1.0, 1.0) * rim * mix(0.04, 0.6, up);
+  // OMBRA sul bordo BASSO → profondità (niente luce indesiderata sotto)
+  glass -= vec3(0.06, 0.055, 0.05) * pow(edge, 2.0) * down * 1.3;
+  glass = max(glass, 0.0);
   // alpha = dentro la forma (angoli arrotondati, antialias)
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
   gl_FragColor = vec4(glass, alpha * 0.95);
