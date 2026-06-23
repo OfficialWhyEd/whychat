@@ -131,6 +131,46 @@ export default function WhyEntropy({ onExit }: { onExit?: () => void }) {
       poly(R * 0.72, 6, -t * 0.16, `rgba(240,163,106,${0.14 + 0.24 * (1 - e)})`, 1);
       poly(R * 1.26, 3, -t * 0.12 + Math.PI, `rgba(201,75,37,0.1)`, 1);
 
+      // ── GEOMETRIA SACRA: sfera wireframe + spirale aurea (φ), al cuore ────────
+      // Additiva sopra i poligoni: più nitida nell'ORDINE, si dissolve nel CAOS.
+      const sa = 0.08 + 0.52 * (1 - e); // alpha: nitida nell'ordine
+      const baseR = Math.min(W, H) * 0.155;
+      // sfera: contorno + meridiani che ruotano (ellissi a raggio orizzontale variabile)
+      ctx.strokeStyle = `rgba(240,163,106,${sa * 0.6})`;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(cx, cy, baseR, 0, 6.283);
+      ctx.stroke();
+      for (let m = 0; m < 6; m++) {
+        const rx = baseR * Math.cos((m / 6) * Math.PI + t * 0.18);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.abs(rx), baseR, 0, 0, 6.283);
+        ctx.strokeStyle = `rgba(240,163,106,${sa * 0.32})`;
+        ctx.stroke();
+      }
+      // equatore
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, baseR, baseR * 0.26, 0, 0, 6.283);
+      ctx.strokeStyle = `rgba(201,75,37,${sa * 0.4})`;
+      ctx.stroke();
+      // spirale aurea: r = r0 · φ^(θ / (π/2)) — cresce di φ ogni quarto di giro
+      const PHI = 1.6180339887;
+      const k = Math.log(PHI) / (Math.PI / 2);
+      ctx.strokeStyle = `rgba(201,75,37,${sa})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const a0 = -t * 0.16;
+      let begun = false;
+      for (let s2 = 0; s2 <= 260; s2++) {
+        const th = (s2 / 260) * 5 * Math.PI * 2;
+        const rr = 1.6 * Math.exp(k * th);
+        if (rr > baseR) break;
+        const px = cx + Math.cos(th + a0) * rr;
+        const py = cy + Math.sin(th + a0) * rr;
+        begun ? ctx.lineTo(px, py) : (ctx.moveTo(px, py), (begun = true));
+      }
+      ctx.stroke();
+
       if (frame % 6 === 0) setHud({ e, nodes: nodes.length, frame });
       raf = requestAnimationFrame(draw);
     };
