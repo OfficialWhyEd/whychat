@@ -27,9 +27,7 @@ uniform vec2 uTexScale;   // dimensione barra in uv dello sfondo
 uniform vec2 uSize;       // dimensione barra in px
 uniform vec2 uBgPx;       // dimensione sfondo in px
 uniform float uRadius;    // raggio angoli px
-uniform float uBevel;     // larghezza smusso del bordo px
-uniform float uIor;       // indice di rifrazione (~1.5)
-uniform float uThick;     // "spessore" del vetro → quanto piega
+uniform float uDispl;     // forza della lente (displacementScale di rdev)
 uniform float uAberr;     // aberrazione cromatica
 uniform float uBlur;      // raggio frost px
 
@@ -38,35 +36,24 @@ float sdf(vec2 p, vec2 b, float r){
   return min(max(q.x,q.y),0.0)+length(max(q,0.0))-r;
 }
 
-// altezza del vetro: ~1 al centro (piatto), scende a 0 sul bordo (smusso) via sigmoide
-float hgt(vec2 p, vec2 b, float r, float tw){
-  float d = sdf(p,b,r);
-  float n = d / tw;          // 0 al bordo, negativo dentro
-  return clamp(1.0 - 1.0/(1.0+exp(-n*6.0)), 0.0, 1.0);
-}
-
 void main(){
   vec2 b = uSize*0.5;
   vec2 p = vUv*uSize - b;
   float d = sdf(p,b,uRadius);
 
-  // normale della superficie curva (gradiente dell'height-field)
-  float e = 1.5;
-  float hx = hgt(p+vec2(e,0.0),b,uRadius,uBevel) - hgt(p-vec2(e,0.0),b,uRadius,uBevel);
-  float hy = hgt(p+vec2(0.0,e),b,uRadius,uBevel) - hgt(p-vec2(0.0,e),b,uRadius,uBevel);
-  vec3 N = normalize(vec3(-hx, -hy, e*2.0/uThick));
-
-  // rifrazione di Snell: dentro il vetro e fuori → offset di campionamento
-  vec3 incident = vec3(0.0,0.0,-1.0);
-  vec3 r1 = refract(incident, N, 1.0/uIor);
-  vec3 r2 = refract(r1, -N, uIor);
-  vec2 offPx = r2.xy * uThick;                 // spostamento in px (forte sul bordo, ~0 al centro)
+  // LENTE di rdev/liquid-glass-react (portata da shader-utils.ts):
+  // displacement ~1 nel centro, sfuma sul bordo; il campione viene "tirato" verso
+  // il centro vicino ai bordi → magnificazione convessa Apple. d/min(b) ~ -1 centro, 0 bordo.
+  float dN = d / min(b.x, b.y);
+  float displacement = 1.0 - smoothstep(0.0, 1.0, dN + 1.0);   // ~1 dentro, →0 al bordo
+  float scaled = smoothstep(0.0, 1.0, displacement);
+  vec2 i2 = vUv - 0.5;
+  vec2 offPx = i2 * (scaled - 1.0) * uDispl;   // verso il centro, forte al bordo
   vec2 baseUv = uTexOff + vUv*uTexScale;
   vec2 offUv = offPx / uBgPx;
-  // aberrazione: canali con spostamento leggermente diverso (solo dove c'è offset = bordi)
   vec2 abUv = offUv * uAberr;
 
-  // frost: blur gaussiano 5x5 sul campione rifratto
+  // frost: blur gaussiano 5x5 sul campione rifratto, con aberrazione per canale
   vec2 bl = vec2(uBlur) / uBgPx;
   vec3 col = vec3(0.0);
   float wsum = 0.0;
@@ -83,23 +70,15 @@ void main(){
   }
   col /= wsum;
 
-  // ADATTAMENTO (regola Apple .regular): il vetro prende colore/luce dall'AMBIENTE
-  // dietro. Campiono largo la regione dietro la barra e ne ricavo la tinta media.
+  // ADATTAMENTO (Apple .regular): il vetro prende colore/luce dall'ambiente dietro
   vec3 amb = texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.5)).rgb;
-  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.18,0.5)).rgb;
-  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.82,0.5)).rgb;
-  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.2)).rgb;
-  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.8)).rgb;
-  amb /= 5.0;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.2,0.5)).rgb;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.8,0.5)).rgb;
+  amb /= 3.0;
 
-  // contenuto rifratto = vetro LIMPIDO (vedi attraverso), frosted cremoso, trasp. media
-  float h = hgt(p,b,uRadius,uBevel);
+  // vetro limpido, frosted, trasparenza media (saturazione come rdev). NIENTE riflessi.
   vec3 glass = col * 1.85 + amb * 0.4 + vec3(0.022,0.019,0.016);
-  // soft-knee leggero (più contrasto, meno torbido)
-  glass = glass / (1.0 + glass*0.3);
-  // velo freddo impercettibile sulla superficie piatta (centro) — vetro, non glow
-  glass = mix(glass, glass + vec3(0.05,0.055,0.07), h*0.10);
-
+  glass = glass / (1.0 + glass*0.3);   // soft-knee leggero
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
   gl_FragColor = vec4(glass, alpha*0.92);
 }
@@ -128,17 +107,13 @@ export function liquidGLSupported(): boolean {
 
 export default function LiquidGlassGL({
   radius = 26,
-  bevel = 22,
-  ior = 1.45,
-  thick = 34,
-  aberration = 0.18,
+  displace = 80,
+  aberration = 0.4,
   blur = 2.2,
   className = "",
 }: {
   radius?: number;
-  bevel?: number;
-  ior?: number;
-  thick?: number;
+  displace?: number;
   aberration?: number;
   blur?: number;
   className?: string;
@@ -186,9 +161,7 @@ export default function LiquidGlassGL({
       uSize: gl.getUniformLocation(prog, "uSize"),
       uBgPx: gl.getUniformLocation(prog, "uBgPx"),
       uRadius: gl.getUniformLocation(prog, "uRadius"),
-      uBevel: gl.getUniformLocation(prog, "uBevel"),
-      uIor: gl.getUniformLocation(prog, "uIor"),
-      uThick: gl.getUniformLocation(prog, "uThick"),
+      uDispl: gl.getUniformLocation(prog, "uDispl"),
       uAberr: gl.getUniformLocation(prog, "uAberr"),
       uBlur: gl.getUniformLocation(prog, "uBlur"),
     };
@@ -229,9 +202,7 @@ export default function LiquidGlassGL({
         gl.uniform2f(U.uSize, rect.width, rect.height);
         gl.uniform2f(U.uBgPx, bgRect.width, bgRect.height);
         gl.uniform1f(U.uRadius, radius);
-        gl.uniform1f(U.uBevel, bevel);
-        gl.uniform1f(U.uIor, ior);
-        gl.uniform1f(U.uThick, thick);
+        gl.uniform1f(U.uDispl, displace);
         gl.uniform1f(U.uAberr, aberration);
         gl.uniform1f(U.uBlur, blur);
         gl.clearColor(0, 0, 0, 0);
@@ -246,7 +217,7 @@ export default function LiquidGlassGL({
       alive = false;
       cancelAnimationFrame(raf);
     };
-  }, [radius, bevel, ior, thick, aberration, blur]);
+  }, [radius, displace, aberration, blur]);
 
   return (
     <canvas
