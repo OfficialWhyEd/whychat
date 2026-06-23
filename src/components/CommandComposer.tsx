@@ -414,6 +414,16 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           }}
         />
       <div
+        style={{
+          // base scura semi-opaca SOPRA il backdrop sfocato: smorza la trama di
+          // sfondo (le "radici") così non trapela dentro la barra.
+          background:
+            "linear-gradient(180deg, rgba(242,239,233,0.05), rgba(242,239,233,0.012)), rgba(16,11,8,0.9)",
+          // frosted PULITO (niente displacement url(): creava una cucitura verticale
+          // visibile proprio al centro della barra). Qui dev'essere impeccabile.
+          backdropFilter: "blur(18px) saturate(155%)",
+          WebkitBackdropFilter: "blur(18px) saturate(155%)",
+        }}
         className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
           armed
             ? "ring-signal/30 shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_32px_-9px_rgba(201,75,37,0.5)]"
@@ -458,8 +468,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           )}
         </AnimatePresence>
 
-        {/* riga 1 — il testo (allineato a sinistra ESATTAMENTE come la riga controlli) */}
-        <div className="relative px-0">
+        {/* riga 1 — il testo. pl-[11px] = stesso inset del contenuto del bottone
+            MODALITÀ (px-2.5 + bordo), così il testo parte ALLINEATO con l'icona sotto. */}
+        <div className="relative pl-[11px] pr-1">
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
           {!value && mode !== "sheet" && (
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 text-[1rem] leading-7 text-faint">
@@ -493,8 +504,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           <motion.button
             onClick={() => setMenu((s) => !s)}
             title="Scegli modalità"
-            whileTap={{ scale: 0.96 }}
-            transition={{ type: "spring", stiffness: 420, damping: 16 }}
+            whileHover={{ scale: 1.035 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 480, damping: 18 }}
             className={`flex h-9 min-w-0 items-center gap-1.5 rounded-full border px-2.5 text-[0.66rem] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
               mode === "chat"
                 ? "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
@@ -506,7 +518,21 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                 mode === "chat" ? "text-faint" : "text-ember"
               }`}
             >
-              {current.icon}
+              {/* il simbolo "molleggia" dentro ad ogni cambio modalità (stile Apple
+                  hello): entra con spring scala+rotazione, si posa SEMPRE dritto. */}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={mode}
+                  className="grid place-items-center"
+                  style={{ transformOrigin: "center" }}
+                  initial={reduce ? { opacity: 0 } : { scale: 0.3, rotate: -35, opacity: 0 }}
+                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                  exit={reduce ? { opacity: 0 } : { scale: 0.3, rotate: 30, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 24 }}
+                >
+                  {current.icon}
+                </motion.span>
+              </AnimatePresence>
             </span>
             <span className="mono truncate leading-none">{mode === "chat" ? "MODALITÀ" : current.label}</span>
             <motion.span
@@ -531,8 +557,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             type="button"
             onClick={() => fileRef.current?.click()}
             title="Allega file (immagini, video, testo, qualsiasi — anche più insieme)"
-            whileTap={{ scale: 0.93 }}
-            transition={{ type: "spring", stiffness: 420, damping: 16 }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 480, damping: 18 }}
             className={`relative flex h-9 shrink-0 items-center justify-center rounded-full border px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-signal/45 ${
               attachments.length ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
             }`}
