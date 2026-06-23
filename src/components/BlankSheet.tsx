@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { seeSheet } from "../lib/api";
 import ChatMessage, { type Message } from "./ChatMessage";
+import { AnimatedIcon } from "./effects/AnimatedIcon";
 
 let sheetMsgId = 0;
 const smid = () => `sm${++sheetMsgId}_${Date.now().toString(36)}`;
@@ -407,9 +408,11 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
                 tool === t ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-dim"
               }`}
             >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d={d} />
-              </svg>
+              <AnimatedIcon pop={false} active={tool === t}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={d} />
+                </svg>
+              </AnimatedIcon>
             </button>
           ))}
           <span className="mx-1 h-5 w-px bg-[var(--color-line2)]" />
@@ -437,9 +440,11 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
             title="Pulisci"
             className="ml-1 grid h-9 w-9 place-items-center rounded-full text-faint transition hover:text-signal-soft"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
-            </svg>
+            <AnimatedIcon pop={false}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+              </svg>
+            </AnimatedIcon>
           </button>
         </div>
       </div>
