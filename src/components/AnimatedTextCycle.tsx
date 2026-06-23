@@ -75,7 +75,10 @@ export default function AnimatedTextCycle({
         className="relative inline-block"
         animate={{
           width,
-          transition: { type: "spring", stiffness: 150, damping: 15, mass: 1.2 },
+          // tween ease-out: NIENTE overshoot/rimbalzo. La larghezza si assesta
+          // una volta sola, così il testo dopo ("Parlami.") resta SOLIDO e non
+          // scatta avanti/indietro ad ogni cambio parola.
+          transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
         }}
       >
         <AnimatePresence mode="wait" initial={false}>
