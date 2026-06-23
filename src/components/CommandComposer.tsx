@@ -4,6 +4,7 @@ import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
+import { LiquidGlassFilter, svgBackdropSupported } from "./effects/LiquidGlass";
 import FileChip from "./FileChip";
 import {
   MessageSquare,
@@ -124,9 +125,13 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const [attachments, setAttachments] = useState<Attachment[]>([]); // più file insieme
   const ref = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = MODES.find((m) => m.id === mode) ?? MODES[0];
   const reduce = useReducedMotion();
+  // liquid glass: misura la barra per dimensionare la mappa-lente di rifrazione
+  const [glassSize, setGlassSize] = useState({ w: 0, h: 0 });
+  const lgOn = useRef(svgBackdropSupported()).current;
   // "Armato": c'è testo o almeno un allegato. Il primario si accende.
   const armed = (value.trim().length > 0 || attachments.length > 0) && !disabled;
 
@@ -275,6 +280,18 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, [value]);
 
+  // misura la barra (per la mappa-lente del liquid glass) e si aggiorna al resize
+  useEffect(() => {
+    if (!lgOn) return;
+    const el = glassRef.current;
+    if (!el) return;
+    const update = () => setGlassSize({ w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [lgOn]);
+
   // Il contorno della barra reagisce al TTS: una variabile CSS --tts (0..1) segue
   // l'ampiezza reale della voce e accende bordo + alone, sincronizzati col parlato.
   useEffect(() => {
@@ -413,15 +430,18 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               "0 0 calc(var(--tts,0) * 46px) calc(var(--tts,0) * 8px) rgba(240,163,106,calc(var(--tts,0) * 0.5)), inset 0 0 calc(var(--tts,0) * 22px) rgba(201,75,37,calc(var(--tts,0) * 0.35))",
           }}
         />
+      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={16} />}
       <div
+        ref={glassRef}
         style={{
-          // base scura semi-opaca SOPRA il backdrop sfocato: smorza la trama di
-          // sfondo (le "radici") così non trapela dentro la barra.
+          // Liquid glass: leggermente translucido così le particelle dietro SI
+          // VEDONO e si rifrangono. La mappa-lente (url) piega lo sfondo sui bordi
+          // (centro neutro → niente cucitura). Safari/iOS: frosted pulito di scorta.
           background:
-            "linear-gradient(180deg, rgba(242,239,233,0.05), rgba(242,239,233,0.012)), rgba(16,11,8,0.9)",
-          // frosted PULITO (niente displacement url(): creava una cucitura verticale
-          // visibile proprio al centro della barra). Qui dev'essere impeccabile.
-          backdropFilter: "blur(18px) saturate(155%)",
+            "linear-gradient(180deg, rgba(242,239,233,0.06), rgba(242,239,233,0.015)), rgba(16,11,8,0.46)",
+          backdropFilter: lgOn
+            ? "blur(7px) saturate(165%) url(#composer-liquid-glass)"
+            : "blur(18px) saturate(155%)",
           WebkitBackdropFilter: "blur(18px) saturate(155%)",
         }}
         className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
