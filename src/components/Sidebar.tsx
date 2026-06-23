@@ -228,9 +228,12 @@ export default function Sidebar({
           <a
             href="#dreams"
             title="I sogni di WhyChat"
-            className="mono rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
+            className="mono flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
           >
-            ☾ SOGNI
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="shrink-0">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            SOGNI
           </a>
           <ProtocolBadge />
         </div>
