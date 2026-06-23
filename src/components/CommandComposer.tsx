@@ -473,7 +473,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         <div className="relative pl-[11px] pr-1">
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
           {!value && mode !== "sheet" && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 text-[1rem] leading-7 text-faint">
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 pl-[11px] text-[1rem] leading-7 text-faint">
               <Typewriter text={PLACEHOLDERS} speed={55} deleteSpeed={28} waitTime={2200} showCursor={false} />
             </div>
           )}
