@@ -5,6 +5,7 @@ import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
 import { LiquidGlassFilter, svgBackdropSupported } from "./effects/LiquidGlass";
+import LiquidGlassGL, { liquidGLSupported } from "./effects/LiquidGlassGL";
 import FileChip from "./FileChip";
 import {
   MessageSquare,
@@ -132,6 +133,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   // liquid glass: misura la barra per dimensionare la mappa-lente di rifrazione
   const [glassSize, setGlassSize] = useState({ w: 0, h: 0 });
   const lgOn = useRef(svgBackdropSupported()).current;
+  // vetro WebGL VERO (campiona+rifrange lo sfondo, funziona anche su iPhone)
+  const glOn = useRef(liquidGLSupported()).current;
   // "Armato": c'è testo o almeno un allegato. Il primario si accende.
   const armed = (value.trim().length > 0 || attachments.length > 0) && !disabled;
 
@@ -409,12 +412,14 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       </AnimatePresence>
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
-      <div ref={barRef} className="relative" style={{ "--tts": "0" } as React.CSSProperties}>
+      <div ref={barRef} className="relative isolate" style={{ "--tts": "0" } as React.CSSProperties}>
+        {/* VETRO WEBGL: campiona le particelle dietro e le rifrange davvero (z dietro al testo) */}
+        {glOn && <LiquidGlassGL className="z-0" radius={26} displace={30} aberration={4.5} band={28} />}
         {/* rim liquid-glass (Apple): bordo vetro spesso — top edge luminoso (specular),
             glow interno alto, ombra interna bassa = profondità del vetro curvo */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-[1] rounded-[26px]"
+          className="pointer-events-none absolute inset-0 z-20 rounded-[26px]"
           style={{
             boxShadow:
               "inset 0 1.5px 0.5px rgba(255,255,255,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 14px 26px -18px rgba(255,255,255,0.34), inset 0 -12px 26px -14px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06)",
@@ -424,7 +429,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             come il riflesso curvo del liquid glass Apple */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-4 top-0 z-[2] h-px rounded-full"
+          className="pointer-events-none absolute inset-x-4 top-0 z-20 h-px rounded-full"
           style={{
             background:
               "linear-gradient(90deg, transparent, rgba(255,255,255,0.5) 28%, rgba(255,255,255,0.72) 50%, rgba(255,255,255,0.5) 72%, transparent)",
@@ -433,28 +438,30 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         {/* contorno reattivo al TTS: bordo + alone che pulsano con la voce reale */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-[1] rounded-[26px] border"
+          className="pointer-events-none absolute inset-0 z-20 rounded-[26px] border"
           style={{
             borderColor: "rgba(240,163,106,calc(var(--tts,0) * 0.85))",
             boxShadow:
               "0 0 calc(var(--tts,0) * 46px) calc(var(--tts,0) * 8px) rgba(240,163,106,calc(var(--tts,0) * 0.5)), inset 0 0 calc(var(--tts,0) * 22px) rgba(201,75,37,calc(var(--tts,0) * 0.35))",
           }}
         />
-      {lgOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={26} aberration={5} />}
+      {lgOn && !glOn && <LiquidGlassFilter id="composer-liquid-glass" width={glassSize.w} height={glassSize.h} scale={26} aberration={5} />}
       <div
         ref={glassRef}
         style={{
-          // Translucido davvero (0.3): l'alone caldo dietro traspare e il vetro
-          // si VEDE. Su Chromium la mappa-lente lo piega (rifrazione + aberrazione);
-          // su Safari/iPhone resta il frosted ma con la luce dietro è comunque vetro.
-          background:
-            "linear-gradient(180deg, rgba(242,239,233,0.06), rgba(242,239,233,0.015)), rgba(16,11,8,0.5)",
-          backdropFilter: lgOn
-            ? "blur(8px) saturate(160%) url(#composer-liquid-glass)"
-            : "blur(18px) saturate(150%)",
-          WebkitBackdropFilter: "blur(18px) saturate(150%)",
+          // Se il vetro WebGL è attivo, il fondo è TRASPARENTE: la rifrazione vera
+          // arriva dal canvas dietro. Altrimenti fallback frosted (SVG su Chromium).
+          background: glOn
+            ? "transparent"
+            : "linear-gradient(180deg, rgba(242,239,233,0.06), rgba(242,239,233,0.015)), rgba(16,11,8,0.5)",
+          backdropFilter: glOn
+            ? "none"
+            : lgOn
+              ? "blur(8px) saturate(160%) url(#composer-liquid-glass)"
+              : "blur(18px) saturate(150%)",
+          WebkitBackdropFilter: glOn ? "none" : "blur(18px) saturate(150%)",
         }}
-        className={`glass glass-sheen rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
+        className={`glass glass-sheen relative z-10 rounded-[26px] px-3 pb-2.5 pt-2.5 ring-1 ring-inset transition-shadow duration-300 ${
           armed
             ? "ring-signal/30 shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_32px_-9px_rgba(201,75,37,0.5)]"
             : "ring-transparent focus-within:ring-signal/25 focus-within:shadow-[inset_0_1px_0.5px_rgba(255,252,247,0.22),0_0_26px_-10px_rgba(201,75,37,0.42)]"
