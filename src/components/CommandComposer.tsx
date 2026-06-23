@@ -501,14 +501,19 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                 : "border-signal/45 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]"
             }`}
           >
-            <span className="shrink-0">
-              <AnimatedIcon className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</AnimatedIcon>
+            <span
+              className={`grid h-4 w-4 shrink-0 place-items-center [&_svg]:h-[15px] [&_svg]:w-[15px] ${
+                mode === "chat" ? "text-faint" : "text-ember"
+              }`}
+            >
+              {current.icon}
             </span>
-            <span className="mono truncate">{mode === "chat" ? "MODALITÀ" : current.label}</span>
+            <span className="mono truncate leading-none">{mode === "chat" ? "MODALITÀ" : current.label}</span>
             <motion.span
-              className="inline-flex shrink-0 opacity-60"
+              className="grid h-3 w-3 shrink-0 place-items-center opacity-60 [&_svg]:h-3 [&_svg]:w-3"
+              style={{ transformOrigin: "center" }}
               animate={{ rotate: menu ? 180 : 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 22 }}
+              transition={{ type: "spring", stiffness: 300, damping: 26 }}
             >
               <ChevronDown size={12} strokeWidth={2.4} />
             </motion.span>
@@ -532,7 +537,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               attachments.length ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
             }`}
           >
-            <Paperclip size={15} strokeWidth={1.7} />
+            <span className="grid h-[15px] w-[15px] place-items-center">
+              <Paperclip size={15} strokeWidth={1.7} />
+            </span>
             {attachments.length > 1 && (
               <span className="mono absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-signal px-1 text-[0.5rem] text-void">
                 {attachments.length}
@@ -552,7 +559,12 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                 search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
-              <motion.span className="inline-flex" animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
+              <motion.span
+                className="grid h-[15px] w-[15px] shrink-0 place-items-center"
+                style={{ transformOrigin: "center" }}
+                animate={{ rotate: search ? 180 : 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 26 }}
+              >
                 <Globe size={15} strokeWidth={1.7} />
               </motion.span>
               <AnimatePresence>
@@ -585,7 +597,9 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                   : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
-              <ListTodo size={15} strokeWidth={1.7} />
+              <span className="grid h-[15px] w-[15px] place-items-center">
+                <ListTodo size={15} strokeWidth={1.7} />
+              </span>
               <AnimatePresence>
                 {plan && (
                   <motion.span

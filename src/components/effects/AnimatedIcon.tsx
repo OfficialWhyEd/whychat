@@ -22,11 +22,12 @@ export function AnimatedIcon({
   return (
     <motion.span
       className={`inline-flex items-center justify-center ${className}`}
-      initial={pop ? { scale: 0.5, opacity: 0, rotate: -12 } : false}
-      animate={{ scale: active ? 1.06 : 1, opacity: 1, rotate: 0 }}
-      transition={{ type: "spring", stiffness: 380, damping: 17, delay }}
-      whileHover={{ scale: 1.18, rotate: 4 }}
-      whileTap={{ scale: 0.88, rotate: -3 }}
+      style={{ transformOrigin: "center", willChange: "transform" }}
+      initial={pop ? { scale: 0.6, opacity: 0 } : false}
+      animate={{ scale: active ? 1.06 : 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 420, damping: 26, delay }}
+      whileHover={{ scale: 1.12 }}
+      whileTap={{ scale: 0.9 }}
     >
       {children}
     </motion.span>
