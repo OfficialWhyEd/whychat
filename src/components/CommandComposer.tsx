@@ -414,7 +414,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
       <div ref={barRef} className="relative isolate" style={{ "--tts": "0" } as React.CSSProperties}>
         {/* VETRO WEBGL: campiona le particelle dietro e le rifrange davvero (z dietro al testo) */}
-        {glOn && <LiquidGlassGL className="z-0" radius={26} displace={30} aberration={4.5} band={28} />}
+        {glOn && <LiquidGlassGL className="z-0" radius={26} displace={36} aberration={4.5} band={28} />}
         {/* rim liquid-glass (Apple): bordo vetro spesso — top edge luminoso (specular),
             glow interno alto, ombra interna bassa = profondità del vetro curvo */}
         <div
