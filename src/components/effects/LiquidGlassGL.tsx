@@ -83,17 +83,25 @@ void main(){
   }
   col /= wsum;
 
-  // contenuto rifratto = il vetro è LIMPIDO (vedi attraverso), frosted cremoso.
-  // più luminoso e meno torbido. NIENTE riflessi.
+  // ADATTAMENTO (regola Apple .regular): il vetro prende colore/luce dall'AMBIENTE
+  // dietro. Campiono largo la regione dietro la barra e ne ricavo la tinta media.
+  vec3 amb = texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.5)).rgb;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.18,0.5)).rgb;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.82,0.5)).rgb;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.2)).rgb;
+  amb += texture2D(uBg, uTexOff + uTexScale*vec2(0.5,0.8)).rgb;
+  amb /= 5.0;
+
+  // contenuto rifratto = vetro LIMPIDO (vedi attraverso), frosted cremoso, trasp. media
   float h = hgt(p,b,uRadius,uBevel);
-  vec3 glass = col * 1.85 + vec3(0.035,0.03,0.026);
-  // soft-knee per non bruciare i punti più luminosi (vetro morbido, non sgranato)
-  glass = glass / (1.0 + glass*0.45);
+  vec3 glass = col * 1.8 + amb * 0.5 + vec3(0.03,0.026,0.022);
+  // soft-knee per non bruciare i picchi (vetro morbido, non sgranato)
+  glass = glass / (1.0 + glass*0.5);
   // velo freddo impercettibile sulla superficie piatta (centro) — vetro, non glow
   glass = mix(glass, glass + vec3(0.05,0.055,0.07), h*0.10);
 
   float alpha = 1.0 - smoothstep(-1.0, 0.6, d);
-  gl_FragColor = vec4(glass, alpha*0.94);
+  gl_FragColor = vec4(glass, alpha*0.92);
 }
 `;
 
