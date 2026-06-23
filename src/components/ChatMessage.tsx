@@ -108,12 +108,10 @@ export interface Message {
   duration?: number; // ms impiegati per la risposta → "Xs" / "X min"
 }
 
-// formatta una durata in modo PRECISO (niente arrotondamenti grossolani):
-//  • sotto 1s → millisecondi esatti: "436ms"
-//  • 1s–60s  → secondi con 2 decimali, virgola IT: "1,36s"
-//  • minuti  → "2 min 04s"  · ore → "1h 05m"
+// formatta una durata in SECONDI esatti (niente arrotondamenti): i secondi
+// veri con 2 decimali e virgola IT — 720ms → "0,72s", 1360ms → "1,36s".
+// Da un minuto in su: "2 min 04s" · da un'ora: "1h 05m".
 function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
   const s = ms / 1000;
   if (s < 60) return `${s.toFixed(2).replace(".", ",")}s`;
   const m = Math.floor(s / 60);
