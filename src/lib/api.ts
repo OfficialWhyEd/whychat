@@ -113,11 +113,12 @@ export async function seeSheet(
   history: ChatMessage[],
   onToken: (delta: string) => void,
   signal?: AbortSignal,
+  source: "sheet" | "chat" = "sheet",
 ): Promise<void> {
   const imgBody = Array.isArray(image) ? { images: image } : { image };
   const res = await postWithRetry(
     "/api/see",
-    { ...imgBody, prompt, history, visitorId: visitorId(), name: getName() },
+    { ...imgBody, prompt, history, visitorId: visitorId(), name: getName(), source },
     signal,
   );
   if (!res.ok || !res.body) throw new Error(await readError(res));
