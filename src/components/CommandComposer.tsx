@@ -5,6 +5,21 @@ import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
 import FileChip from "./FileChip";
+import {
+  MessageSquare,
+  PenTool,
+  BrainCircuit,
+  GraduationCap,
+  SquarePen,
+  Users,
+  Globe,
+  Hexagon,
+  Music,
+  Sprout,
+  Paperclip,
+  ListTodo,
+  ChevronDown,
+} from "lucide-react";
 
 // X di rimozione DENTRO l'angolo (mai tagliata dallo scroll) per immagini/video
 function RemoveX({ onClick }: { onClick: () => void }) {
@@ -34,64 +49,20 @@ interface ModeDef {
   icon: React.ReactNode;
 }
 
-const I = (d: string, extra?: React.ReactNode) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d={d} />
-    {extra}
-  </svg>
-);
+// icone modalità: lucide, nitide e centrate (qualità Claude). Strokewidth coerente.
+const ic = (Comp: typeof MessageSquare) => <Comp size={16} strokeWidth={1.7} />;
 
 export const MODES: ModeDef[] = [
-  { id: "chat", label: "Chat", desc: "Conversazione, come sempre", icon: I("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z") },
-  { id: "canvas", label: "Canvas", desc: "Disegna l'idea, fa cose", icon: I("M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z M2 2l7.586 7.586", <circle cx="11" cy="11" r="2" />) },
-  { id: "deep", label: "Deep thinking", desc: "Ragiona a fondo (Gemini)", tag: "∞", icon: I("M9.5 2a4.5 4.5 0 0 0-4.5 4.5c-.9.5-1.5 1.5-1.5 2.7 0 .9.4 1.8 1 2.4-.3.5-.5 1.1-.5 1.9a3 3 0 0 0 3 3 3 3 0 0 0 3 3V2z M14.5 2a4.5 4.5 0 0 1 4.5 4.5c.9.5 1.5 1.5 1.5 2.7 0 .9-.4 1.8-1 2.4.3.5.5 1.1.5 1.9a3 3 0 0 1-3 3 3 3 0 0 1-3 3V2z") },
-  { id: "learn", label: "Apprendimento", desc: "Impara un passo alla volta", icon: I("M22 10L12 5 2 10l10 5 10-5z M6 12v5c0 1 2.5 2.5 6 2.5s6-1.5 6-2.5v-5") },
-  { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: I("M12 3v18M3 12h18", <circle cx="12" cy="12" r="9" />) },
-  {
-    id: "group",
-    label: "Group Prediction",
-    desc: "Più agenti predicono insieme",
-    tag: "beta",
-    icon: I("M10.8 8.4 8 13.6M13.2 8.4 16 13.6M9 16.5h6", (
-      <>
-        <circle cx="12" cy="6" r="2.5" />
-        <circle cx="6.5" cy="16" r="2.5" />
-        <circle cx="17.5" cy="16" r="2.5" />
-      </>
-    )) },
-  {
-    id: "earth",
-    label: "WhyEarth",
-    desc: "Il mondo al centro, interattivo",
-    tag: "beta",
-    icon: I("M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", <circle cx="12" cy="12" r="9" />),
-  },
-  {
-    id: "entropy",
-    label: "WhyEntropy",
-    desc: "Ordine geometrico che si dissolve in caos",
-    tag: "beta",
-    icon: I("M12 3 21 19 3 19Z", <circle cx="12" cy="13.5" r="1.5" />),
-  },
-  {
-    id: "music",
-    label: "WhyMusic",
-    desc: "Analizza una traccia nel dettaglio",
-    tag: "beta",
-    icon: I("M9 18V5l12-2v13", (
-      <>
-        <circle cx="6" cy="18" r="3" />
-        <circle cx="18" cy="16" r="3" />
-      </>
-    )),
-  },
-  {
-    id: "ecosystem",
-    label: "WhyEcosystem",
-    desc: "Simulazioni di natura, dal vivo",
-    tag: "beta",
-    icon: I("M12 2a9 9 0 0 0-9 9c0 5 4 9 9 11 5-2 9-6 9-11a9 9 0 0 0-9-9zM12 7v8M8 11h8", undefined),
-  },
+  { id: "chat", label: "Chat", desc: "Conversazione, come sempre", icon: ic(MessageSquare) },
+  { id: "canvas", label: "Canvas", desc: "Disegna l'idea, fa cose", icon: ic(PenTool) },
+  { id: "deep", label: "Deep thinking", desc: "Ragiona a fondo (Gemini)", tag: "∞", icon: ic(BrainCircuit) },
+  { id: "learn", label: "Apprendimento", desc: "Impara un passo alla volta", icon: ic(GraduationCap) },
+  { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: ic(SquarePen) },
+  { id: "group", label: "Group Prediction", desc: "Più agenti predicono insieme", tag: "beta", icon: ic(Users) },
+  { id: "earth", label: "WhyEarth", desc: "Il mondo al centro, interattivo", tag: "beta", icon: ic(Globe) },
+  { id: "entropy", label: "WhyEntropy", desc: "Ordine geometrico che si dissolve in caos", tag: "beta", icon: ic(Hexagon) },
+  { id: "music", label: "WhyMusic", desc: "Analizza una traccia nel dettaglio", tag: "beta", icon: ic(Music) },
+  { id: "ecosystem", label: "WhyEcosystem", desc: "Simulazioni di natura, dal vivo", tag: "beta", icon: ic(Sprout) },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
@@ -487,8 +458,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           )}
         </AnimatePresence>
 
-        {/* riga 1 — il testo */}
-        <div className="relative px-0.5">
+        {/* riga 1 — il testo (allineato a sinistra ESATTAMENTE come la riga controlli) */}
+        <div className="relative px-0">
           {/* placeholder che si auto-digita quando la barra è vuota (chat) */}
           {!value && mode !== "sheet" && (
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start overflow-hidden whitespace-nowrap py-1 text-[1rem] leading-7 text-faint">
@@ -534,12 +505,13 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               <AnimatedIcon className={mode === "chat" ? "text-faint" : "text-ember"}>{current.icon}</AnimatedIcon>
             </span>
             <span className="mono truncate">{mode === "chat" ? "MODALITÀ" : current.label}</span>
-            <motion.svg
-              width="10" height="10" viewBox="0 0 24 24" fill="none" className="opacity-60"
-              animate={{ rotate: menu ? 180 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            <motion.span
+              className="inline-flex shrink-0 opacity-60"
+              animate={{ rotate: menu ? 180 : 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 22 }}
             >
-              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            </motion.svg>
+              <ChevronDown size={12} strokeWidth={2.4} />
+            </motion.span>
           </motion.button>
 
           {/* tasto: allega QUALSIASI file (graffetta). Immagini/video → vision, testo → contenuto */}
@@ -560,9 +532,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               attachments.length ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
             }`}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Paperclip size={15} strokeWidth={1.7} />
             {attachments.length > 1 && (
               <span className="mono absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-signal px-1 text-[0.5rem] text-void">
                 {attachments.length}
@@ -582,11 +552,8 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                 search ? "border-signal/50 bg-[rgba(201,75,37,0.14)] text-ember hover:bg-[rgba(201,75,37,0.2)]" : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
-              <motion.span animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" strokeLinecap="round" />
-                </svg>
+              <motion.span className="inline-flex" animate={{ rotate: search ? 180 : 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
+                <Globe size={15} strokeWidth={1.7} />
               </motion.span>
               <AnimatePresence>
                 {search && (
@@ -618,9 +585,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
                   : "border-[var(--color-line2)] text-dim hover:border-[rgba(242,239,233,0.22)] hover:text-paper"
               }`}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
-              </svg>
+              <ListTodo size={15} strokeWidth={1.7} />
               <AnimatePresence>
                 {plan && (
                   <motion.span
