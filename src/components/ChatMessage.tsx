@@ -105,6 +105,18 @@ export interface Message {
   planActive?: number; // indice del passo in corso (precedenti = fatti)
   image?: string; // immagine singola (OnlyType: snapshot del foglio)
   attachments?: { image?: string; name: string; kind: string }[]; // allegati (più file)
+  duration?: number; // ms impiegati per la risposta → "Xs" / "X min"
+}
+
+// formatta una durata in modo umano: 0.4s · 12s · 3 min · 1h 5m
+function fmtDuration(ms: number): string {
+  const s = ms / 1000;
+  if (s < 1) return `${s.toFixed(1)}s`;
+  if (s < 60) return `${Math.round(s)}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
 }
 
 export default function ChatMessage({
@@ -398,6 +410,16 @@ export default function ChatMessage({
                 </svg>
               </AnimatedIcon>
             </button>
+            {/* quanto ci ha messo a rispondere (anche deep thinking) */}
+            {msg.duration != null && (
+              <span className="mono ml-auto flex items-center gap-1 pl-2 text-[0.5rem] text-faint" title="Tempo di risposta">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8v4l3 2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {fmtDuration(msg.duration)}
+              </span>
+            )}
           </div>
         )}
       </div>

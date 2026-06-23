@@ -36,6 +36,7 @@ export function saveChats(chats: Chat[]) {
       if (m.thoughts) base.thoughts = m.thoughts;
       if (m.image) base.image = m.image;
       if (m.attachments?.length) base.attachments = m.attachments;
+      if (m.duration != null) base.duration = m.duration;
       return base;
     }),
   }));
