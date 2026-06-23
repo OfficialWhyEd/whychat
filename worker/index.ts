@@ -804,7 +804,7 @@ async function handleReason(req: Request, env: Env, ctx: ExecutionContext): Prom
 // stesso pattern SSE delle altre risposte Gemini, ma con l'immagine nel contesto.
 async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cors = corsHeaders(req, env);
-  let body: { image?: unknown; images?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown };
+  let body: { image?: unknown; images?: unknown; prompt?: unknown; history?: unknown; visitorId?: unknown; name?: unknown; source?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -835,15 +835,23 @@ async function handleSee(req: Request, env: Env, ctx: ExecutionContext): Promise
   }));
   contents.push({ role: "user", parts: [{ text: prompt }, ...imageParts] });
 
-  const systemText =
-    SOUL + BEHAVIOR + nowContext() +
-    (name ? `\n\n[Parli con: ${name}]` : "") +
-    `\n\n[MODALITÀ ONLYTYPE — DISEGNO→CREAZIONE] Il foglio è un PROMPT VISIVO: la persona schizza/scrive un'idea e tu la REALIZZI davvero, non la descrivi. Capisci cosa ha disegnato (un layout di sito, un'interfaccia, un personaggio, un diagramma, un'icona, un'equazione, un calcolo, l'idea di un gioco…) e con un ragionamento serio PRODUCI il risultato finito.
+  const source = String(body.source ?? "sheet");
+  const memCtx = await recallMemory(env, visitorId, name);
+  // OnlyType (foglio/sketch) → CREA. Foto/file allegati in chat → guarda e rispondi.
+  const visionInstr =
+    source === "chat"
+      ? `\n\n[FILE/IMMAGINI ALLEGATI] La persona ti ha allegato uno o più file (foto, immagini, fotogrammi di video, PDF, documenti). GUARDALI e LEGGILI davvero: capisci cosa contengono e il loro contesto d'insieme, poi rispondi alla sua richiesta — descrivi, analizza, estrai informazioni, riassumi, traduci o risolvi, quello che serve. Sii preciso e concreto su ciò che vedi/leggi, cita dettagli reali. Mantieni il contesto se i file si collegano fra loro. CREA un artifact (sito/SVG/gioco/diagramma) SOLO se te lo chiede esplicitamente; altrimenti rispondi in modo naturale, come in una normale conversazione.`
+      : `\n\n[MODALITÀ ONLYTYPE — DISEGNO→CREAZIONE] Il foglio è un PROMPT VISIVO: la persona schizza/scrive un'idea e tu la REALIZZI davvero, non la descrivi. Capisci cosa ha disegnato (un layout di sito, un'interfaccia, un personaggio, un diagramma, un'icona, un'equazione, un calcolo, l'idea di un gioco…) e con un ragionamento serio PRODUCI il risultato finito.
 - Se è UI / sito / gioco / visualizzazione / diagramma → emetti un artifact \`\`\`whyart (HTML+CSS+JS autosufficiente, estetica WhyEd dark) che lo costruisce DAVVERO e funzionante.
 - Se è un disegno / forma / logo → un artifact \`\`\`whyart con un SVG pulito che lo ricrea.
 - Se è un'equazione, un calcolo o una formula → risolvilo passo-passo e dai il risultato netto.
 - Una riga per dire cosa hai capito dallo sketch, POI crea. Se il foglio è troppo vago, fa' UNA domanda secca ma proponi comunque una prima versione. Mai limitarti a descrivere: qui si COSTRUISCE.
 - VELOCITÀ: per uno sketch semplice rispondi SUBITO, senza preamboli né ragionamenti lunghi. Ragiona di più solo se il disegno è davvero complesso. L'utente vuole risposte rapide.`;
+  const systemText =
+    SOUL + BEHAVIOR + nowContext() +
+    (name ? `\n\n[Parli con: ${name}]` : "") +
+    memCtx +
+    visionInstr;
 
   const reqBody = JSON.stringify({
     systemInstruction: { parts: [{ text: systemText }] },

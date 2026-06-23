@@ -323,6 +323,7 @@ function Chat() {
             patch(acc);
           },
           ctrl.signal,
+          "chat", // foto/file in chat → guarda e rispondi (non il prompt OnlyType "crea")
         );
         patch(acc, true);
         if (autoTtsRef.current) speak(acc);
