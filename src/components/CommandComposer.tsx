@@ -413,26 +413,16 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
       {/* Barra — due righe: testo sopra, controlli sotto. Mai sovrapposizioni. */}
       <div ref={barRef} className="relative isolate" style={{ "--tts": "0" } as React.CSSProperties}>
-        {/* VETRO WEBGL: campiona le particelle dietro e le rifrange davvero (z dietro al testo) */}
-        {glOn && <LiquidGlassGL className="z-0" radius={26} displace={36} aberration={4.5} band={28} />}
-        {/* rim liquid-glass (Apple): bordo vetro spesso — top edge luminoso (specular),
-            glow interno alto, ombra interna bassa = profondità del vetro curvo */}
+        {/* VETRO WEBGL: campiona le particelle dietro e le rifrange (rifrazione vera, niente riflessi) */}
+        {glOn && <LiquidGlassGL className="z-0" radius={26} bevel={28} ior={1.5} thick={52} aberration={0.22} blur={2.0} />}
+        {/* solo un contorno sottile per definire il bordo + leggera ombra sotto per
+            profondità. NESSUN riflesso bianco (la rifrazione la fa il WebGL). */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 z-20 rounded-[26px]"
           style={{
             boxShadow:
-              "inset 0 1.5px 0.5px rgba(255,255,255,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 14px 26px -18px rgba(255,255,255,0.34), inset 0 -12px 26px -14px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.06)",
-          }}
-        />
-        {/* glint specular: una sottile riga di luce sul bordo alto che sfuma ai lati,
-            come il riflesso curvo del liquid glass Apple */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-4 top-0 z-20 h-px rounded-full"
-          style={{
-            background:
-              "linear-gradient(90deg, transparent, rgba(255,255,255,0.5) 28%, rgba(255,255,255,0.72) 50%, rgba(255,255,255,0.5) 72%, transparent)",
+              "inset 0 0 0 1px rgba(255,255,255,0.07), inset 0 -10px 22px -16px rgba(0,0,0,0.5)",
           }}
         />
         {/* contorno reattivo al TTS: bordo + alone che pulsano con la voce reale */}
