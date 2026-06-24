@@ -15,13 +15,18 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
   const [error, setError] = useState<string | null>(null);
   const [quakeCount, setQuakeCount] = useState(0);
   const [flightCount, setFlightCount] = useState(0);
+  const [nasaCount, setNasaCount] = useState(0);
   const [quakesOn, setQuakesOn] = useState(false);
   const [flightsOn, setFlightsOn] = useState(false);
+  const [nasaOn, setNasaOn] = useState(false);
 
   // i livelli sono letti dentro render() (closure) tramite ref
   const quakesOnRef = useRef(false);
   const flightsOnRef = useRef(false);
+  const nasaOnRef = useRef(false);
   const flightsRef = useRef<[number, number][]>([]); // [lng, lat]
+  // eventi naturali NASA EONET: [lng, lat, color]
+  const nasaRef = useRef<[number, number, string][]>([]);
   const renderRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -130,6 +135,24 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
         }
         context.globalAlpha = 1;
       }
+      // eventi naturali NASA EONET (se accesi) — colore per categoria, alone
+      if (nasaOnRef.current) {
+        for (const [lng, lat, color] of nasaRef.current) {
+          const p = projection([lng, lat]);
+          if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
+            context.beginPath();
+            context.arc(p[0], p[1], 2.4 * s, 0, 2 * Math.PI);
+            context.fillStyle = color;
+            context.globalAlpha = 0.2;
+            context.fill();
+            context.beginPath();
+            context.arc(p[0], p[1], 1.3 * s, 0, 2 * Math.PI);
+            context.globalAlpha = 0.95;
+            context.fill();
+            context.globalAlpha = 1;
+          }
+        }
+      }
       // terremoti reali (se accesi) — grandezza per magnitudo
       if (quakesOnRef.current) {
         for (const [lng, lat, mag] of quakes) {
@@ -227,9 +250,26 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
     loadQuakes();
     const quakeTimer = setInterval(loadQuakes, 120000);
 
+    // eventi naturali NASA EONET (via Worker, cache edge 10min) — sempre pronti
+    const loadNasa = async () => {
+      try {
+        const r = await fetch(`${WORKER_URL}/api/nasa-events`);
+        if (!r.ok) return;
+        const j = (await r.json()) as { events?: { lon: number; lat: number; color: string }[] };
+        nasaRef.current = (j.events ?? []).map((e) => [e.lon, e.lat, e.color] as [number, number, string]);
+        setNasaCount(nasaRef.current.length);
+        render();
+      } catch {
+        /* il globo resta comunque */
+      }
+    };
+    loadNasa();
+    const nasaTimer = setInterval(loadNasa, 600000);
+
     return () => {
       t.stop();
       clearInterval(quakeTimer);
+      clearInterval(nasaTimer);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("wheel", onWheel);
     };
@@ -272,6 +312,12 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
     setFlightsOn(v);
     if (!v) renderRef.current();
   };
+  const toggleNasa = () => {
+    const v = !nasaOnRef.current;
+    nasaOnRef.current = v;
+    setNasaOn(v);
+    renderRef.current();
+  };
 
   return (
     <div className={`relative grid h-full w-full place-items-center ${className}`}>
@@ -292,6 +338,7 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
       {/* livelli on/off */}
       <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
         <LayerToggle on={quakesOn} onClick={toggleQuakes} dot="#c94b25" label="Terremoti" count={quakeCount} />
+        <LayerToggle on={nasaOn} onClick={toggleNasa} dot="#f0552a" label="Eventi NASA" count={nasaCount} loading={nasaOn && nasaCount === 0} />
         <LayerToggle on={flightsOn} onClick={toggleFlights} dot="#f0a36a" label="Voli live" count={flightCount} loading={flightsOn && flightCount === 0} />
       </div>
 
