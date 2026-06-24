@@ -157,8 +157,7 @@ function Chat() {
       for (const c of cands.slice(0, 5)) {
         const pin = await geocodePlace(c);
         if (pin) {
-          setMapPin(pin);
-          setEarthLive(true); // vola sulla mappa viva quando emerge un luogo
+          setMapPin(pin); // il globo ci vola sopra e pianta il pin (resta sul globo)
           break;
         }
       }
@@ -708,7 +707,7 @@ function Chat() {
                     <WhyEarthLive focus={mapPin} onExit={() => setMode("chat")} />
                   </Suspense>
                 ) : (
-                  <WhyEarth onExit={() => setMode("chat")} />
+                  <WhyEarth onExit={() => setMode("chat")} focus={mapPin} />
                 )
               ) : (
                 <WhyEntropy onExit={() => setMode("chat")} />
@@ -716,7 +715,7 @@ function Chat() {
             </div>
             {/* toggle vista: Globo a puntini (default) ↔ Mappa viva (vola+pin) */}
             {earth && (
-              <div className="absolute right-4 top-16 z-10 flex overflow-hidden rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] text-[0.5rem] backdrop-blur">
+              <div className="absolute left-4 top-16 z-20 flex overflow-hidden rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] text-[0.5rem] backdrop-blur">
                 <button
                   onClick={() => setEarthLive(false)}
                   className={`mono px-2.5 py-1 transition ${!earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
@@ -731,15 +730,13 @@ function Chat() {
                 </button>
               </div>
             )}
-            {/* la conversazione galleggia sopra: il mondo resta visibile, le risposte appaiono */}
+            {/* CHAT — pannello solido in basso: il globo resta sopra (pin visibile),
+                la conversazione si legge benissimo, nessuna sovrapposizione */}
             {!empty && (
-              <div className="scroll-thin pointer-events-none absolute inset-x-0 bottom-0 top-1/3 flex flex-col justify-end overflow-y-auto">
-                <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 pb-3">
+              <div className="scroll-thin absolute inset-x-0 bottom-0 z-10 max-h-[42%] overflow-y-auto border-t border-signal/20 bg-[rgba(10,9,8,0.97)] backdrop-blur-xl">
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-4">
                   {messages.map((m, i) => (
-                    <div
-                      key={m.id}
-                      className="pointer-events-auto rounded-2xl border border-[var(--color-line2)] bg-[rgba(16,13,11,0.74)] backdrop-blur-md"
-                    >
+                    <div key={m.id} className="rounded-2xl border border-[var(--color-line2)] bg-[rgba(22,17,14,0.6)]">
                       <ChatMessage
                         msg={earth ? { ...m, content: m.content.replace(LUOGO_RE, "").trimEnd() } : m}
                         prompt={messages[i - 1]?.role === "user" ? messages[i - 1].content : ""}
