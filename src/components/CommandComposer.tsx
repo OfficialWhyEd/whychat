@@ -434,14 +434,15 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
       <div ref={barRef} className="relative isolate" style={{ "--tts": "0" } as React.CSSProperties}>
         {/* VETRO WEBGL: campiona le particelle dietro e le rifrange (rifrazione vera, niente riflessi) */}
         {glOn && <LiquidGlassGL className="z-0" radius={26} displace={64} aberration={0.06} blur={2.0} />}
-        {/* solo un contorno sottile per definire il bordo + leggera ombra sotto per
-            profondità. NESSUN riflesso bianco (la rifrazione la fa il WebGL). */}
+        {/* Bordo SPECULARE DIREZIONALE stile vetro liquido Apple: rim brillante
+            in alto (luce dall'alto), contro-luce in basso, lati spenti + ombra
+            interna per profondità. La rifrazione vera la fa il WebGL dietro. */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 z-20 rounded-[26px]"
           style={{
             boxShadow:
-              "inset 0 0 0 1px rgba(255,255,255,0.07), inset 0 -10px 22px -16px rgba(0,0,0,0.5)",
+              "inset 0 1.5px 0.5px -0.5px rgba(255,253,250,0.5), inset 0 -1px 0.5px -0.5px rgba(255,255,255,0.14), inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -10px 22px -16px rgba(0,0,0,0.5)",
           }}
         />
         {/* contorno reattivo al TTS: bordo + alone che pulsano con la voce reale */}
