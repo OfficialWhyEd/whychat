@@ -39,6 +39,8 @@ export default function WhyEarth({
   // pin del luogo nominato in chat + funzione per volarci sopra (sogno #16)
   const pinRef = useRef<{ lng: number; lat: number; name: string } | null>(null);
   const flyToRef = useRef<(lng: number, lat: number) => void>(() => {});
+  const pinElRef = useRef<HTMLDivElement>(null); // marcatore DOM premium sopra il canvas
+  const [pinName, setPinName] = useState("");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -179,35 +181,21 @@ export default function WhyEarth({
           }
         }
       }
-      // pin del luogo nominato in chat — oro, alone pulsante + etichetta col nome
-      if (pinRef.current) {
-        const p = projection([pinRef.current.lng, pinRef.current.lat]);
-        // visibile solo se sull'emisfero rivolto verso di noi
-        const visible = p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H;
-        if (visible) {
-          const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
-          context.beginPath();
-          context.arc(p[0], p[1], (6 + pulse * 5) * s, 0, 2 * Math.PI);
-          context.fillStyle = "rgba(240,200,90,0.18)";
-          context.fill();
-          context.beginPath();
-          context.arc(p[0], p[1], 3.2 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#f0c85a";
-          context.shadowColor = "#f0c85a";
-          context.shadowBlur = 12;
-          context.fill();
-          context.shadowBlur = 0;
-          // etichetta
-          const label = pinRef.current.name;
-          context.font = `${11 * s}px ui-monospace, monospace`;
-          const tw = context.measureText(label).width;
-          const lx = Math.min(Math.max(p[0] + 10 * s, 4), W - tw - 12);
-          const ly = p[1] - 8 * s;
-          context.fillStyle = "rgba(16,13,11,0.78)";
-          context.fillRect(lx - 5, ly - 12 * s, tw + 10, 18 * s);
-          context.fillStyle = "#f2efe9";
-          context.textBaseline = "middle";
-          context.fillText(label, lx, ly - 3 * s);
+      // pin del luogo: posiziona il marcatore DOM premium (goccia+alone+chip)
+      // alla coordinata proiettata. Visibile solo sull'emisfero rivolto a noi.
+      const el = pinElRef.current;
+      if (el) {
+        if (pinRef.current) {
+          const p = projection([pinRef.current.lng, pinRef.current.lat]);
+          const visible = p && p[0] >= 4 && p[0] <= W - 4 && p[1] >= 4 && p[1] <= H - 4;
+          if (visible) {
+            el.style.transform = `translate(-50%,-100%) translate(${p![0]}px, ${p![1]}px)`;
+            el.style.opacity = "1";
+          } else {
+            el.style.opacity = "0";
+          }
+        } else {
+          el.style.opacity = "0";
         }
       }
     };
@@ -348,6 +336,7 @@ export default function WhyEarth({
   useEffect(() => {
     if (!focus) return;
     pinRef.current = focus;
+    setPinName(focus.name);
     flyToRef.current(focus.lng, focus.lat);
   }, [focus]);
 
@@ -398,6 +387,32 @@ export default function WhyEarth({
   return (
     <div className={`relative grid h-full w-full place-items-center ${className}`}>
       <canvas ref={canvasRef} className="cursor-grab touch-none select-none active:cursor-grabbing" />
+
+      {/* marcatore del luogo: goccia oro + alone pulsante + chip col nome.
+          Posizione aggiornata in render() seguendo la rotazione del globo. */}
+      <div
+        ref={pinElRef}
+        className="pointer-events-none absolute left-0 top-0 z-10 flex flex-col items-center transition-opacity duration-300"
+        style={{ opacity: 0 }}
+      >
+        {pinName && (
+          <span className="mono mb-1 whitespace-nowrap rounded-full border border-[#f0c85a]/40 bg-[rgba(16,13,11,0.82)] px-2 py-0.5 text-[0.6rem] text-[#f3e3b0] backdrop-blur">
+            {pinName}
+          </span>
+        )}
+        <span className="relative grid place-items-center">
+          {/* alone pulsante */}
+          <span
+            className="absolute h-6 w-6 rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(240,200,90,0.45) 0%, transparent 70%)", animation: "whyearth-ping 1.8s ease-out infinite" }}
+          />
+          {/* goccia */}
+          <svg width="20" height="26" viewBox="0 0 24 32" fill="none" style={{ filter: "drop-shadow(0 2px 6px rgba(240,200,90,0.6))" }}>
+            <path d="M12 1C6.5 1 2 5.4 2 11c0 7.5 10 20 10 20s10-12.5 10-20C22 5.4 17.5 1 12 1z" fill="#f0c85a" stroke="#7a5a18" strokeWidth="1" />
+            <circle cx="12" cy="11" r="3.4" fill="#1a130a" />
+          </svg>
+        </span>
+      </div>
       {loading && !error && <div className="mono absolute text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
       {error && <div className="mono absolute text-[0.6rem] text-signal-soft">{error}</div>}
 
