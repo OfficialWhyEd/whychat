@@ -22,6 +22,7 @@ import {
   ListTodo,
   ChevronDown,
 } from "lucide-react";
+import { docxToText, xlsxToText, isDocx, isXlsx } from "../lib/office";
 
 // X di rimozione DENTRO l'angolo (mai tagliata dallo scroll) per immagini/video
 function RemoveX({ onClick }: { onClick: () => void }) {
@@ -267,6 +268,18 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
         const reader = new FileReader();
         reader.onload = () => addAttach({ id, name, kind: "file", data: String(reader.result) });
         reader.readAsDataURL(file);
+      } else if (isDocx(name, mime)) {
+        // .docx: estraiamo il testo dei paragrafi (OOXML via jszip)
+        addAttach({ id, name, kind: "text", text: "" });
+        void docxToText(file)
+          .then((txt) => setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, text: txt || "(documento vuoto)" } : a))))
+          .catch(() => setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, kind: "file", text: undefined } : a))));
+      } else if (isXlsx(name, mime)) {
+        // .xlsx: estraiamo le celle in formato tabellare
+        addAttach({ id, name, kind: "text", text: "" });
+        void xlsxToText(file)
+          .then((txt) => setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, text: txt || "(foglio vuoto)" } : a))))
+          .catch(() => setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, kind: "file", text: undefined } : a))));
       } else if (mime.includes("zip") || /\.zip$/i.test(name)) {
         // ZIP: spacchetta e aggiunge i file dentro (async)
         void onZip(file);
