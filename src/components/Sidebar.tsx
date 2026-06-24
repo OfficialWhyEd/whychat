@@ -261,6 +261,16 @@ export default function Sidebar({
               SOGNI
             </a>
           </div>
+          <a
+            href="#benchmark"
+            title="Benchmark — WhyChat a confronto con i grandi assistant"
+            className="mono flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="shrink-0">
+              <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            BENCHMARK
+          </a>
           <ProtocolBadge />
         </div>
       </aside>

@@ -21,6 +21,7 @@ import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
 import WhySkills from "./components/WhySkills";
+import Benchmark from "./components/Benchmark";
 import AdminDashboard from "./components/AdminDashboard";
 import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, type ChatMessage as ApiMsg } from "./lib/api";
 
@@ -79,6 +80,7 @@ export default function App() {
   if (route === "#admin") return <AdminDashboard />;
   if (route === "#dreams") return <Dreams />;
   if (route === "#skills") return <WhySkills />;
+  if (route === "#benchmark") return <Benchmark />;
   return <Chat />;
 }
 
