@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import SoulParticles from "./components/SoulParticles";
 import InkReveal from "./components/InkReveal";
 import SilkTrails from "./components/SilkTrails";
@@ -31,8 +31,8 @@ function looksComplex(t: string): boolean {
   if ((s.match(/\?/g)?.length ?? 0) >= 2) return true;
   return /\b(progett\w+|costruisc\w+|costruire|pianific\w+|analizz\w+|confront\w+|organizz\w+|strategi\w+|spiega\w*|perché|perche|come mai|dimostra\w*|calcol\w+|risolv\w+|piano|passo\s*passo|step by step|in dettaglio|tutti i passaggi)\b/i.test(s);
 }
-import type { MapPin } from "./components/WhyEarthLive";
-const WhyEarthLive = lazy(() => import("./components/WhyEarthLive"));
+// il luogo nominato in chat → pin sul globo (geocodePlace ritorna questa forma)
+type MapPin = { lng: number; lat: number; name: string };
 // estrae il marcatore [[LUOGO: ...]] che WhyChat aggiunge in modalità earth
 const LUOGO_RE = /\[\[\s*LUOGO\s*:\s*([^\]]+?)\s*\]\]/i;
 
@@ -135,9 +135,7 @@ function Chat() {
   const music = mode === "music";
   const ecosystem = mode === "ecosystem";
 
-  // WhyEarth: vista "Globo" (d3 a puntini, default) o "Mappa viva" (MapLibre).
-  // Il sogno: quando la chat nomina un luogo, vola lì e pianta il pin.
-  const [earthLive, setEarthLive] = useState(false);
+  // WhyEarth: quando la chat nomina un luogo, il globo ci vola e pianta il pin.
   const [mapPin, setMapPin] = useState<MapPin | null>(null);
   const lastGeoRef = useRef("");
   // testo dell'ultimo messaggio assistant completo (per cercarvi un luogo a stream finito)
@@ -700,36 +698,11 @@ function Chat() {
             {/* il visivo (globo / geometria) resta protagonista, sullo sfondo */}
             <div className="absolute inset-0">
               {earth ? (
-                earthLive ? (
-                  <Suspense
-                    fallback={<div className="mono grid h-full place-items-center text-[0.6rem] text-faint">CARICO IL MONDO…</div>}
-                  >
-                    <WhyEarthLive focus={mapPin} onExit={() => setMode("chat")} />
-                  </Suspense>
-                ) : (
-                  <WhyEarth onExit={() => setMode("chat")} focus={mapPin} />
-                )
+                <WhyEarth onExit={() => setMode("chat")} focus={mapPin} />
               ) : (
                 <WhyEntropy onExit={() => setMode("chat")} />
               )}
             </div>
-            {/* toggle vista: Globo a puntini (default) ↔ Mappa viva (vola+pin) */}
-            {earth && (
-              <div className="absolute left-4 top-16 z-20 flex overflow-hidden rounded-full border border-[var(--color-line2)] bg-[rgba(16,13,11,0.6)] text-[0.5rem] backdrop-blur">
-                <button
-                  onClick={() => setEarthLive(false)}
-                  className={`mono px-2.5 py-1 transition ${!earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
-                >
-                  GLOBO
-                </button>
-                <button
-                  onClick={() => setEarthLive(true)}
-                  className={`mono px-2.5 py-1 transition ${earthLive ? "bg-[rgba(201,75,37,0.2)] text-ember" : "text-faint hover:text-paper"}`}
-                >
-                  MAPPA VIVA
-                </button>
-              </div>
-            )}
             {/* CHAT — pannello solido in basso: il globo resta sopra (pin visibile),
                 la conversazione si legge benissimo, nessuna sovrapposizione */}
             {!empty && (
