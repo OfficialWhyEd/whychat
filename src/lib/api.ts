@@ -346,3 +346,51 @@ export async function groupPredict(messages: GroupMsg[], question: string): Prom
   const d = (await res.json()) as { prediction?: string; thoughts?: string };
   return { prediction: d.prediction ?? "", thoughts: d.thoughts ?? "", text: d.prediction ?? "" };
 }
+
+// ── WhySkills: istruzioni personalizzate riusabili, salvate per-utente nel KV ──
+// Le skill ATTIVE vengono iniettate nel system prompt a ogni richiesta, così
+// WhyChat si comporta come l'utente vuole, su ogni dispositivo.
+export interface WhySkill {
+  id: string;
+  name: string;
+  instruction: string;
+  active: boolean;
+  createdAt: string;
+}
+export const SKILL_MAX = 12;
+export const SKILL_INSTR_MAX = 1200;
+
+/** Le skill di questa persona (lette dal KV via Worker). */
+export async function fetchSkills(): Promise<WhySkill[]> {
+  const q = new URLSearchParams({ visitorId: visitorId(), name: getName() });
+  const res = await fetch(`${WORKER_URL}/api/skills?${q}`);
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as { skills?: WhySkill[] };
+  return d.skills ?? [];
+}
+
+async function postSkill(body: Record<string, unknown>): Promise<WhySkill[]> {
+  const res = await postWithRetry(
+    "/api/skills",
+    { ...body, visitorId: visitorId(), name: getName() },
+    undefined,
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const d = (await res.json()) as { skills?: WhySkill[] };
+  return d.skills ?? [];
+}
+
+/** Crea o aggiorna una skill (id presente = update). Ritorna la lista nuova. */
+export function saveSkill(skill: { id?: string; name: string; instruction: string; active?: boolean }): Promise<WhySkill[]> {
+  return postSkill({ action: "save", skill });
+}
+
+/** Accende/spegne una skill. */
+export function toggleSkill(id: string): Promise<WhySkill[]> {
+  return postSkill({ action: "toggle", id });
+}
+
+/** Elimina una skill. */
+export function deleteSkill(id: string): Promise<WhySkill[]> {
+  return postSkill({ action: "delete", id });
+}

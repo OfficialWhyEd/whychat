@@ -20,6 +20,7 @@ import ArtifactPanel, { type ArtifactData } from "./components/ArtifactPanel";
 import Vault from "./components/Vault";
 import Dashboard from "./components/Dashboard";
 import Dreams from "./components/Dreams";
+import WhySkills from "./components/WhySkills";
 import AdminDashboard from "./components/AdminDashboard";
 import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, type ChatMessage as ApiMsg } from "./lib/api";
 
@@ -77,6 +78,7 @@ export default function App() {
   if (route === "#dashboard") return <Dashboard />;
   if (route === "#admin") return <AdminDashboard />;
   if (route === "#dreams") return <Dreams />;
+  if (route === "#skills") return <WhySkills />;
   return <Chat />;
 }
 

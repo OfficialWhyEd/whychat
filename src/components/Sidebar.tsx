@@ -239,16 +239,28 @@ export default function Sidebar({
 
         {/* footer */}
         <div className="flex flex-col gap-2 border-t border-[var(--color-line)] px-3 py-3">
-          <a
-            href="#dreams"
-            title="I sogni di WhyChat"
-            className="mono flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="shrink-0">
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            SOGNI
-          </a>
+          <div className="flex gap-2">
+            <a
+              href="#skills"
+              title="Le tue skill — istruzioni che WhyChat ricorda sempre"
+              className="mono flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="shrink-0">
+                <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              SKILL
+            </a>
+            <a
+              href="#dreams"
+              title="I sogni di WhyChat"
+              className="mono flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line2)] px-3 py-2 text-center text-[0.52rem] text-faint transition hover:text-ember"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="shrink-0">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              SOGNI
+            </a>
+          </div>
           <ProtocolBadge />
         </div>
       </aside>
