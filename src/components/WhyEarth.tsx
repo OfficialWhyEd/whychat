@@ -9,7 +9,15 @@ import { WORKER_URL } from "../lib/api";
  * AGGIUNTE non distruttive: livelli on/off (Terremoti USGS, Voli live adsb.lol)
  * e uscita. Il design del globo è quello di prima, intatto.
  */
-export default function WhyEarth({ className = "", onExit }: { className?: string; onExit?: () => void }) {
+export default function WhyEarth({
+  className = "",
+  onExit,
+  focus = null,
+}: {
+  className?: string;
+  onExit?: () => void;
+  focus?: { lng: number; lat: number; name: string } | null;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +36,9 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
   // eventi naturali NASA EONET: [lng, lat, color]
   const nasaRef = useRef<[number, number, string][]>([]);
   const renderRef = useRef<() => void>(() => {});
+  // pin del luogo nominato in chat + funzione per volarci sopra (sogno #16)
+  const pinRef = useRef<{ lng: number; lat: number; name: string } | null>(null);
+  const flyToRef = useRef<(lng: number, lat: number) => void>(() => {});
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -168,8 +179,64 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
           }
         }
       }
+      // pin del luogo nominato in chat — oro, alone pulsante + etichetta col nome
+      if (pinRef.current) {
+        const p = projection([pinRef.current.lng, pinRef.current.lat]);
+        // visibile solo se sull'emisfero rivolto verso di noi
+        const visible = p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H;
+        if (visible) {
+          const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
+          context.beginPath();
+          context.arc(p[0], p[1], (6 + pulse * 5) * s, 0, 2 * Math.PI);
+          context.fillStyle = "rgba(240,200,90,0.18)";
+          context.fill();
+          context.beginPath();
+          context.arc(p[0], p[1], 3.2 * s, 0, 2 * Math.PI);
+          context.fillStyle = "#f0c85a";
+          context.shadowColor = "#f0c85a";
+          context.shadowBlur = 12;
+          context.fill();
+          context.shadowBlur = 0;
+          // etichetta
+          const label = pinRef.current.name;
+          context.font = `${11 * s}px ui-monospace, monospace`;
+          const tw = context.measureText(label).width;
+          const lx = Math.min(Math.max(p[0] + 10 * s, 4), W - tw - 12);
+          const ly = p[1] - 8 * s;
+          context.fillStyle = "rgba(16,13,11,0.78)";
+          context.fillRect(lx - 5, ly - 12 * s, tw + 10, 18 * s);
+          context.fillStyle = "#f2efe9";
+          context.textBaseline = "middle";
+          context.fillText(label, lx, ly - 3 * s);
+        }
+      }
     };
     renderRef.current = render;
+
+    // vola sul luogo: ruota il globo così il punto guarda verso di noi (easeOutCubic)
+    const flyTo = (lng: number, lat: number) => {
+      auto = false;
+      const targetL = -lng;
+      const targetP = Math.max(-90, Math.min(90, -lat));
+      let dl = targetL - rotation[0];
+      while (dl > 180) dl -= 360;
+      while (dl < -180) dl += 360;
+      const startL = rotation[0];
+      const startP = rotation[1];
+      const dur = 1100;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const k = Math.min(1, (now - t0) / dur);
+        const e = 1 - Math.pow(1 - k, 3);
+        rotation[0] = startL + dl * e;
+        rotation[1] = startP + (targetP - startP) * e;
+        projection.rotate(rotation);
+        render();
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    flyToRef.current = flyTo;
 
     const load = async () => {
       try {
@@ -198,6 +265,8 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
         rotation[0] += 0.22;
         projection.rotate(rotation);
         render();
+      } else if (pinRef.current) {
+        render(); // tiene vivo il pulse del pin anche da fermo
       }
     });
 
@@ -274,6 +343,13 @@ export default function WhyEarth({ className = "", onExit }: { className?: strin
       canvas.removeEventListener("wheel", onWheel);
     };
   }, []);
+
+  // quando la chat nomina un luogo (focus), pianta il pin e ci vola sopra
+  useEffect(() => {
+    if (!focus) return;
+    pinRef.current = focus;
+    flyToRef.current(focus.lng, focus.lat);
+  }, [focus]);
 
   // voli reali — caricati solo quando il livello è acceso (refresh 25s)
   useEffect(() => {
