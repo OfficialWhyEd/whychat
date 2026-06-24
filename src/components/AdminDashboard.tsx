@@ -158,8 +158,8 @@ export default function AdminDashboard() {
 
   // ── dashboard ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-[100dvh] bg-[#0d0a08] px-4 py-5 text-paper sm:px-8">
-      <div className="mx-auto max-w-3xl">
+    <div className="scroll-thin h-[100dvh] overflow-y-auto bg-[#0d0a08] px-4 py-5 text-paper sm:px-8">
+      <div className="mx-auto max-w-3xl pb-10">
         <header className="mb-6 flex items-center justify-between gap-3">
           <div>
             <a href="#" className="mono text-[0.6rem] text-faint hover:text-paper">← WhyChat</a>

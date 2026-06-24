@@ -128,7 +128,7 @@ export default function Dashboard() {
   const maxMode = agg.topModes[0]?.[1] || 1;
 
   return (
-    <div className="scroll-thin mx-auto h-full max-w-5xl overflow-y-auto px-5 py-10">
+    <div className="scroll-thin mx-auto h-[100dvh] max-w-5xl overflow-y-auto px-5 py-10">
       <div className="mb-8 flex items-center gap-3">
         <WhyMark size={36} />
         <div>
