@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { renderMarkdown } from "../lib/markdown";
+import { animateNumbersIn } from "../lib/animateNumbers";
 import { speak, stop as ttsStop, ttsSupported, voice } from "../lib/tts";
 import { parseSegments } from "../lib/artifacts";
 import Artifact from "./Artifact";
@@ -176,6 +177,12 @@ export default function ChatMessage({
 
   // se il messaggio sparisce/cambia mentre parla, ferma la voce
   useEffect(() => () => ttsStop(), []);
+
+  // count-up sui numeri-risultato: una volta sola, a messaggio completo (non in
+  // streaming, per non animare cifre parziali). Il body è dangerouslySetInnerHTML.
+  useEffect(() => {
+    if (msg.role === "assistant" && !msg.streaming) animateNumbersIn(bodyRef.current);
+  }, [msg.role, msg.streaming, msg.content]);
 
   const toggleSpeak = () => {
     if (speaking) {

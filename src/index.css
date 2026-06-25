@@ -348,6 +348,14 @@ body {
   font-size: 0.5rem;
   color: var(--color-faint);
 }
+/* numeri-risultato che fanno count-up: cifre a larghezza fissa (niente jitter) +
+   leggero accento, così il risultato "salta all'occhio" mentre conta. */
+.wc-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  color: var(--color-ember);
+}
+
 .wc-link {
   color: var(--color-signal-soft);
   text-decoration: underline;
