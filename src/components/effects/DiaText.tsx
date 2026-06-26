@@ -164,8 +164,15 @@ export const DiaText = forwardRef<HTMLSpanElement, DiaTextProps>(
         filter: contentFilter,
         transform: contentTransform,
         willChange: "filter, opacity, transform",
+        // La box dello sfondo (background-clip:text) deve coprire TUTTO l'inchiostro
+        // del glifo, anche i riccioli alti/bassi dei font corsivi: senza margine
+        // verticale le ascendenti/discendenti restano senza fill → "tagliate".
+        // Multi-testo (contatori) gira in un contenitore overflow:hidden → niente padding.
+        ...(isMulti
+          ? { lineHeight: 1.15 }
+          : { lineHeight: 1.32, padding: "0.16em 0.1em 0.22em" }),
       }),
-      [backgroundImage, contentFilter, contentTransform, textOpacity],
+      [backgroundImage, contentFilter, contentTransform, textOpacity, isMulti],
     );
 
     const clearCycle = useCallback(() => {
@@ -269,7 +276,7 @@ export const DiaText = forwardRef<HTMLSpanElement, DiaTextProps>(
         transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         {...props}
       >
-        <motion.span aria-hidden className="inline-block leading-[100%]" style={contentStyle}>
+        <motion.span aria-hidden className="inline-block" style={contentStyle}>
           {texts[activeIndex]}
         </motion.span>
         <span className="sr-only">{texts[activeIndex]}</span>

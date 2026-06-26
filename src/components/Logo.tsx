@@ -27,7 +27,7 @@ export default function Logo({
   }, [cycle, hold]);
 
   return (
-    <span className={`font-logo inline-block leading-none ${className}`} aria-label={text}>
+    <span className={`font-logo inline-block overflow-visible ${className}`} aria-label={text}>
       <AnimatePresence mode="wait">
         <motion.span
           key={cycle}
