@@ -18,6 +18,7 @@ import {
   Hexagon,
   Music,
   Sprout,
+  Clapperboard,
   Paperclip,
   ListTodo,
   ChevronDown,
@@ -42,7 +43,7 @@ function RemoveX({ onClick }: { onClick: () => void }) {
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem" | "insta";
 
 interface ModeDef {
   id: Mode;
@@ -66,6 +67,7 @@ export const MODES: ModeDef[] = [
   { id: "entropy", label: "WhyEntropy", desc: "Ordine geometrico che si dissolve in caos", tag: "beta", icon: ic(Hexagon) },
   { id: "music", label: "WhyMusic", desc: "Analizza una traccia nel dettaglio", tag: "beta", icon: ic(Music) },
   { id: "ecosystem", label: "WhyEcosystem", desc: "Simulazioni di natura, dal vivo", tag: "beta", icon: ic(Sprout) },
+  { id: "insta", label: "WhyInsta", desc: "Incolla un link Instagram: lo guardo davvero", tag: "beta", icon: ic(Clapperboard) },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in

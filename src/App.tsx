@@ -23,7 +23,11 @@ import Dreams from "./components/Dreams";
 import WhySkills from "./components/WhySkills";
 import Benchmark from "./components/Benchmark";
 import AdminDashboard from "./components/AdminDashboard";
-import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, type ChatMessage as ApiMsg } from "./lib/api";
+import { streamChat, deepThink, planSteps, geocodePlace, seeSheet, reasonGroq, streamInsta, type ChatMessage as ApiMsg } from "./lib/api";
+
+// WhyInsta: riconosce un link social (IG/TikTok/YouTube) nel messaggio.
+const SOCIAL_URL_RE =
+  /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am|tiktok\.com|vm\.tiktok\.com|youtube\.com|youtu\.be)\/[^\s]+/i;
 
 // Adaptive reasoning: domanda "impegnativa" → WhyChat ragiona da solo (poi puoi
 // saltare con "Rispondi Ora"). Stessa euristica del composer.
@@ -313,7 +317,32 @@ function Chat() {
       );
 
     try {
-      if (media.length) {
+      if (useMode === "insta") {
+        // WhyInsta: incolli un link social → WhyChat GUARDA il contenuto.
+        const link = (sentContent.match(SOCIAL_URL_RE) || [])[0];
+        if (!link) {
+          patch(
+            "Incollami un **link Instagram** (o TikTok/YouTube) e lo guardo davvero — ti racconto cosa succede, cosa viene detto e perché funziona. Puoi anche aggiungere una domanda accanto al link.",
+            true,
+          );
+        } else {
+          const ctrl = new AbortController();
+          abortRef.current = ctrl;
+          let acc = "";
+          await streamInsta(
+            link,
+            sentContent,
+            baseMessages.map((m) => ({ role: m.role, content: m.content })),
+            (d) => {
+              acc += d;
+              patch(acc);
+            },
+            ctrl.signal,
+          );
+          patch(acc, true);
+          if (autoTtsRef.current) speak(acc);
+        }
+      } else if (media.length) {
         // Ci sono file leggibili da Gemini (immagini/frame video/PDF): li LEGGE.
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -876,6 +905,7 @@ const MODE_SHORT: Record<Mode, string> = {
   entropy: "entropy",
   music: "music",
   ecosystem: "ecosystem",
+  insta: "whyinsta",
 };
 const modeIcon = (m: Mode) => MODES.find((x) => x.id === m)?.icon ?? null;
 

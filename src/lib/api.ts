@@ -147,6 +147,50 @@ export async function seeSheet(
   }
 }
 
+/**
+ * WhyInsta: incolli un link Instagram (o TikTok/YouTube) e WhyChat GUARDA il
+ * contenuto — trascrizione, scene, testo a schermo, caption — e ti risponde in
+ * streaming. Il Worker scarica il media (microservizio yt-dlp) e lo passa a
+ * Gemini multimodale. Stesso lettore SSE di streamChat/seeSheet.
+ */
+export async function streamInsta(
+  url: string,
+  prompt: string,
+  history: ChatMessage[],
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await postWithRetry(
+    "/api/insta",
+    { url, prompt, history, visitorId: visitorId(), name: getName() },
+    signal,
+  );
+  if (!res.ok || !res.body) throw new Error(await readError(res));
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      const data = t.slice(5).trim();
+      if (data === "[DONE]") return;
+      try {
+        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string") onToken(delta);
+      } catch {
+        /* frammento parziale, ignora */
+      }
+    }
+  }
+}
+
 /** Geocoding keyless (open-meteo): nome luogo → coordinate, per piantare il pin su WhyEarth. */
 export async function geocodePlace(name: string): Promise<{ lng: number; lat: number; name: string } | null> {
   const q = name.trim();
