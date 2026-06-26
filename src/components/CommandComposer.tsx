@@ -123,6 +123,7 @@ interface Props {
   plan?: boolean;
   onTogglePlan?: () => void;
   name?: string; // se noto, WhyChat personalizza i suggerimenti (dopo il primo, generale)
+  queued?: number; // queue-steering: messaggi in coda mentre WhyChat sta rispondendo
 }
 
 // plan mode disponibile in TUTTE le modalità non-beta (utile ovunque)
@@ -137,7 +138,7 @@ function looksComplex(t: string): boolean {
   );
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0 }: Props) {
   // Suggerimenti: il PRIMO è sempre generale; se WhyChat conosce la persona, dal
   // secondo in poi (quindi "dopo un tot") entrano frasi personalizzate col nome.
   const placeholders = name
@@ -351,7 +352,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
   const submit = () => {
     const t = value.trim();
-    if ((!t && attachments.length === 0) || disabled) return;
+    if (!t && attachments.length === 0) return;
+    // QUEUE-STEERING: durante lo streaming NON blocchiamo l'invio — il messaggio
+    // viene accodato (lo gestisce App) e si aggiunge al turno successivo. Fuori
+    // streaming è il normale invio. Mai più messaggi persi mentre WhyChat parla.
     onSend(t, attachments);
     setValue("");
     setAttachments([]);
@@ -544,7 +548,6 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             ref={ref}
             value={value}
             rows={1}
-            disabled={disabled}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -711,10 +714,25 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           {streaming ? (
             <button
               onClick={onStop}
-              title="Ferma"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
+              title={queued > 0 ? `${queued} in coda · ferma` : "Ferma"}
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
             >
               <span className="block h-3 w-3 rounded-[3px] bg-paper" />
+              {/* queue-steering: badge col numero di messaggi in coda per il turno dopo */}
+              <AnimatePresence>
+                {queued > 0 && (
+                  <motion.span
+                    key={queued}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                    className="mono absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-signal px-1 text-[0.5rem] font-bold text-paper"
+                  >
+                    {queued}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
           ) : (
             <OriginButton

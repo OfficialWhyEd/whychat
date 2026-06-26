@@ -114,6 +114,11 @@ function Chat() {
     localStorage.setItem("whychat_sidebar", sidebar ? "1" : "0");
   }, [sidebar]);
   const abortRef = useRef<AbortController | null>(null);
+  // QUEUE-STEERING (concetto openclaw): i messaggi inviati MENTRE WhyChat risponde
+  // non si perdono — entrano in coda e, al confine del turno (fine stream), vengono
+  // uniti (modalità "collect") e mandati come follow-up. Niente sessioni nuove.
+  const steerQueueRef = useRef<{ text: string; attachments?: Attachment[] }[]>([]);
+  const [queuedCount, setQueuedCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Sessione gruppo: vive tra le conversazioni come tutte le altre.
@@ -243,7 +248,15 @@ function Chat() {
   }, []);
 
   const send = async (text: string, attachments?: Attachment[], modeOverride?: Mode) => {
-    if (streaming) return;
+    if (streaming) {
+      // confine del runtime occupato → accoda (non perdere il messaggio).
+      const t = text.trim();
+      if (t || (attachments && attachments.length)) {
+        steerQueueRef.current.push({ text: t, attachments });
+        setQueuedCount(steerQueueRef.current.length);
+      }
+      return;
+    }
     setError("");
     const t0 = Date.now(); // per misurare quanto ci mette a rispondere
     const existing = chats.find((c) => c.id === activeId);
@@ -550,8 +563,24 @@ function Chat() {
         saveChats(next);
         return next;
       });
+      // QUEUE-STEERING: confine del turno → svuota la coda. I messaggi accodati
+      // mentre WhyChat rispondeva si UNISCONO (collect) in un unico follow-up e
+      // ripartono. Un piccolo debounce lascia "posare" lo stato di streaming.
+      if (steerQueueRef.current.length) {
+        const q = steerQueueRef.current;
+        steerQueueRef.current = [];
+        setQueuedCount(0);
+        const mergedText = q.map((m) => m.text).filter(Boolean).join("\n");
+        const mergedAtts = q.flatMap((m) => m.attachments ?? []);
+        // usa la closure PIÙ RECENTE (sendRef) → legge lo stato chat aggiornato
+        setTimeout(() => sendRef.current?.(mergedText, mergedAtts.length ? mergedAtts : undefined), 180);
+      }
     }
   };
+  // sendRef punta sempre all'ultimo `send` → il flush del queue-steering non usa
+  // una closure stantia (evita di scrivere su una lista chat vecchia).
+  const sendRef = useRef(send);
+  sendRef.current = send;
 
   const stop = () => abortRef.current?.abort();
 
@@ -846,6 +875,7 @@ function Chat() {
               plan={planMode}
               onTogglePlan={() => setPlanMode((p) => !p)}
               name={name}
+              queued={queuedCount}
             />
             <p className="mx-auto mt-2.5 max-w-md text-center text-[0.6rem] leading-relaxed text-faint">
               <span className="text-dim/70">{modelName(model)}</span> · le conversazioni possono
