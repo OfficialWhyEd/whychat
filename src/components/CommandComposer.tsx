@@ -58,16 +58,18 @@ const ic = (Comp: typeof MessageSquare) => <Comp size={16} strokeWidth={1.7} />;
 
 export const MODES: ModeDef[] = [
   { id: "chat", label: "Chat", desc: "Conversazione, come sempre", icon: ic(MessageSquare) },
+  // Modalità Why* mature, promosse in alto (non più beta).
+  { id: "insta", label: "WhyInsta", desc: "Incolla un link Instagram: lo guardo davvero", icon: ic(Clapperboard) },
+  { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", icon: ic(SquarePen) },
+  { id: "earth", label: "WhyEarth", desc: "Il mondo al centro, interattivo", icon: ic(Globe) },
+  { id: "music", label: "WhyMusic", desc: "Analizza una traccia nel dettaglio", icon: ic(Music) },
+  { id: "ecosystem", label: "WhyEcosystem", desc: "Simulazioni di natura, dal vivo", icon: ic(Sprout) },
+  { id: "entropy", label: "WhyEntropy", desc: "Ordine geometrico che si dissolve in caos", icon: ic(Hexagon) },
+  { id: "group", label: "Group Prediction", desc: "Più agenti predicono insieme", icon: ic(Users) },
+  // Conversazionali core sotto.
   { id: "canvas", label: "Canvas", desc: "Disegna l'idea, fa cose", icon: ic(PenTool) },
   { id: "deep", label: "Deep thinking", desc: "Ragiona a fondo (Gemini)", tag: "∞", icon: ic(BrainCircuit) },
   { id: "learn", label: "Apprendimento", desc: "Impara un passo alla volta", icon: ic(GraduationCap) },
-  { id: "sheet", label: "OnlyType", desc: "Foglio bianco: fai quello che vuoi", tag: "beta", icon: ic(SquarePen) },
-  { id: "group", label: "Group Prediction", desc: "Più agenti predicono insieme", tag: "beta", icon: ic(Users) },
-  { id: "earth", label: "WhyEarth", desc: "Il mondo al centro, interattivo", tag: "beta", icon: ic(Globe) },
-  { id: "entropy", label: "WhyEntropy", desc: "Ordine geometrico che si dissolve in caos", tag: "beta", icon: ic(Hexagon) },
-  { id: "music", label: "WhyMusic", desc: "Analizza una traccia nel dettaglio", tag: "beta", icon: ic(Music) },
-  { id: "ecosystem", label: "WhyEcosystem", desc: "Simulazioni di natura, dal vivo", tag: "beta", icon: ic(Sprout) },
-  { id: "insta", label: "WhyInsta", desc: "Incolla un link Instagram: lo guardo davvero", tag: "beta", icon: ic(Clapperboard) },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
