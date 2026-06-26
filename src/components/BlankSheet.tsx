@@ -58,6 +58,7 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
   const [prompt, setPrompt] = useState("");
   const [thread, setThread] = useState<Message[]>(session?.chat ?? []);
   const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState(false); // "otturatore": lampo di cattura all'invio
   const [err, setErr] = useState("");
   const lastImgRef = useRef<string | null>(session?.image ?? null); // ultimo snapshot, per i follow-up
   const threadRef = useRef(thread);
@@ -242,7 +243,15 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
     setErr("");
     setPrompt("");
     setBusy(true);
-    setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio alla chat
+    // "otturatore": se c'è un disegno fresco, un lampo segnala che l'ho CATTURATO,
+    // poi il foglio si chiude. Comunica il riconoscimento prima che la chat parta.
+    if (fresh) {
+      setFlash(true);
+      setTimeout(() => setFlash(false), 360);
+      setTimeout(() => setCollapsed(true), 220);
+    } else {
+      setCollapsed(true); // a invio, la tendina del foglio si chiude per dare spazio alla chat
+    }
 
     const history = threadRef.current.map((m) => ({ role: m.role, content: m.content }));
     const userMsg: Message = {
@@ -261,7 +270,10 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
     try {
       await seeSheet(
         img ?? "",
-        text.trim() || "Guarda il disegno e crea ciò che rappresenta.",
+        text.trim() ||
+          "Guarda BENE il disegno: capisci cosa rappresenta e poi CREALO davvero. " +
+            "Se è un'interfaccia/sito → fai il codice. Se è una forma/idea → falla esistere " +
+            "(SVG, componente, equazione, meccanica di gioco). Non descrivere e basta: realizza.",
         history,
         (d) => {
           acc += d;
@@ -312,6 +324,18 @@ export default function BlankSheet({ session, onPersist, onExit, onOpenArtifact 
       >
         <div className="min-h-0 overflow-hidden">
       <div ref={wrapRef} className="glass relative h-[min(54vh,520px)] overflow-hidden rounded-3xl">
+        {/* lampo "otturatore": cattura del disegno all'invio */}
+        <AnimatePresence>
+          {flash && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 z-20 rounded-3xl bg-paper"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.72, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1], times: [0, 0.25, 1] }}
+            />
+          )}
+        </AnimatePresence>
         <canvas
           ref={canvasRef}
           onPointerDown={onDown}

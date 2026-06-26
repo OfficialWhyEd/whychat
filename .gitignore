@@ -18,3 +18,8 @@ HANDOFF.md
 worker/
 whychat-openclaw/SOUL.md
 wrangler.toml
+
+# Python del fetcher WhyInsta
+__pycache__/
+*.pyc
+.venv/

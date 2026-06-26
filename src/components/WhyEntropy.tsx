@@ -62,15 +62,24 @@ export default function WhyEntropy({ onExit }: { onExit?: () => void }) {
       t += reduce ? 0 : 0.016;
       frame++;
       // entropia: onda morbida 0..1 (periodo ~40s). reduce-motion = stato fisso ordinato-ish.
-      const e = reduce ? 0.35 : 0.5 - 0.5 * Math.cos(t * 0.16);
-      const drift = e * 56;
+      const e0 = reduce ? 0.35 : 0.5 - 0.5 * Math.cos(t * 0.16);
+      // rampa NON-lineare: l'ordine resta cristallino più a lungo, poi il caos erutta.
+      // (curva a S: e^1.7 schiaccia il basso, così ORDER è nitido e CHAOS esplode)
+      const e = Math.pow(e0, 1.7);
       ctx.clearRect(0, 0, W, H);
 
-      // posizioni: reticolo + deriva. Ogni nodo vaga nella SUA direzione (fasi
-      // indipendenti su x e y) → dispersione uniforme, niente banding orizzontale.
+      // posizioni: reticolo advettato da un CAMPO DI FLUSSO coerente. I vicini
+      // condividono l'angolo del campo → la maglia si stira a vortici (tessuto in
+      // turbolenza), non rumore indipendente. drift cresce col caos; un secondo
+      // ottava (turbolenza fine) entra solo nel CAOS (∝ e²) per la frammentazione.
+      const drift = e * 64;
+      const turb = e * e * 30;
       for (const n of nodes) {
-        n.x = n.hx + Math.cos(n.ph * 1.7 + t * 0.5) * drift + Math.sin(n.ph * 0.7 - t * 0.31) * drift * 0.5;
-        n.y = n.hy + Math.sin(n.ph * 2.3 + t * 0.42) * drift + Math.cos(n.ph * 1.1 - t * 0.27) * drift * 0.5;
+        // angolo del campo: funzione liscia di (posizione, tempo) → swirl condivisi
+        const ang = Math.sin(n.hx * 0.0095 + t * 0.45) * 1.7 + Math.cos(n.hy * 0.011 - t * 0.34) * 1.7;
+        const ang2 = Math.cos(n.hx * 0.027 - t * 0.6) * 3.0 + Math.sin(n.hy * 0.031 + t * 0.5) * 3.0;
+        n.x = n.hx + Math.cos(ang) * drift + Math.cos(ang2) * turb;
+        n.y = n.hy + Math.sin(ang) * drift + Math.sin(ang2) * turb;
       }
 
       // archi tra vicini di griglia: la maglia che si tende e si spezza

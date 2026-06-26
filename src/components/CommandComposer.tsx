@@ -18,6 +18,7 @@ import {
   Hexagon,
   Music,
   Sprout,
+  Clapperboard,
   Paperclip,
   ListTodo,
   ChevronDown,
@@ -42,7 +43,7 @@ function RemoveX({ onClick }: { onClick: () => void }) {
 // Suggerimenti che si auto-digitano nella barra vuota (solo modalità chat).
 const PLACEHOLDERS = ["Parlami di un'idea…", "Chi sei davvero?", "Come pensi quando crei?", "Aiutami a partire…"];
 
-export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem";
+export type Mode = "chat" | "canvas" | "deep" | "learn" | "sheet" | "group" | "earth" | "entropy" | "music" | "ecosystem" | "insta";
 
 interface ModeDef {
   id: Mode;
@@ -66,6 +67,7 @@ export const MODES: ModeDef[] = [
   { id: "entropy", label: "WhyEntropy", desc: "Ordine geometrico che si dissolve in caos", tag: "beta", icon: ic(Hexagon) },
   { id: "music", label: "WhyMusic", desc: "Analizza una traccia nel dettaglio", tag: "beta", icon: ic(Music) },
   { id: "ecosystem", label: "WhyEcosystem", desc: "Simulazioni di natura, dal vivo", tag: "beta", icon: ic(Sprout) },
+  { id: "insta", label: "WhyInsta", desc: "Incolla un link Instagram: lo guardo davvero", tag: "beta", icon: ic(Clapperboard) },
 ];
 
 // Easing morbido: entra in ease-out (decelera arrivando), esce in ease-in
@@ -73,15 +75,28 @@ export const MODES: ModeDef[] = [
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const EASE_IN = [0.55, 0, 1, 0.45] as const;
 
+// Tendina trasform-based (no height-collapse): fade+scale+slide con origine in
+// basso. La chiusura NON è istantanea — gli item escono a cascata inversa
+// (afterChildren) e il pannello scivola giù morbido. GPU-cheap → liscia su mobile.
 const container = {
-  hidden: { opacity: 0, height: 0 },
-  show: { opacity: 1, height: "auto", transition: { height: { duration: 0.32, ease: EASE_OUT }, staggerChildren: 0.05 } },
-  exit: { opacity: 0, height: 0, transition: { height: { duration: 0.24, ease: EASE_IN }, opacity: { duration: 0.16 } } },
+  hidden: { opacity: 0, y: 10, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.28, ease: EASE_OUT, staggerChildren: 0.045, delayChildren: 0.04 },
+  },
+  exit: {
+    opacity: 0,
+    y: 8,
+    scale: 0.98,
+    transition: { duration: 0.22, ease: EASE_IN, staggerChildren: 0.025, staggerDirection: -1 },
+  },
 };
 const itemV = {
   hidden: { opacity: 0, y: 14 },
   show: { opacity: 1, y: 0, transition: { duration: 0.26, ease: EASE_OUT } },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.16, ease: EASE_IN } },
+  exit: { opacity: 0, y: 6, transition: { duration: 0.18, ease: EASE_IN } },
 };
 
 // Un allegato generico: ogni tipo di file. Per immagini e video portiamo un
@@ -108,6 +123,7 @@ interface Props {
   plan?: boolean;
   onTogglePlan?: () => void;
   name?: string; // se noto, WhyChat personalizza i suggerimenti (dopo il primo, generale)
+  queued?: number; // queue-steering: messaggi in coda mentre WhyChat sta rispondendo
 }
 
 // plan mode disponibile in TUTTE le modalità non-beta (utile ovunque)
@@ -122,7 +138,7 @@ function looksComplex(t: string): boolean {
   );
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0 }: Props) {
   // Suggerimenti: il PRIMO è sempre generale; se WhyChat conosce la persona, dal
   // secondo in poi (quindi "dopo un tot") entrano frasi personalizzate col nome.
   const placeholders = name
@@ -336,7 +352,10 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
 
   const submit = () => {
     const t = value.trim();
-    if ((!t && attachments.length === 0) || disabled) return;
+    if (!t && attachments.length === 0) return;
+    // QUEUE-STEERING: durante lo streaming NON blocchiamo l'invio — il messaggio
+    // viene accodato (lo gestisce App) e si aggiunge al turno successivo. Fuori
+    // streaming è il normale invio. Mai più messaggi persi mentre WhyChat parla.
     onSend(t, attachments);
     setValue("");
     setAttachments([]);
@@ -361,6 +380,7 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
               initial="hidden"
               animate="show"
               exit="exit"
+              style={{ transformOrigin: "bottom center" }}
               className="glass absolute bottom-[calc(100%+8px)] left-0 z-20 w-full overflow-hidden rounded-2xl"
             >
               {/* fondo solido: il menu non lascia trasparire la chat dietro */}
@@ -528,7 +548,6 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
             ref={ref}
             value={value}
             rows={1}
-            disabled={disabled}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -695,10 +714,25 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
           {streaming ? (
             <button
               onClick={onStop}
-              title="Ferma"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
+              title={queued > 0 ? `${queued} in coda · ferma` : "Ferma"}
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[rgba(242,239,233,0.1)] text-paper transition hover:bg-[rgba(242,239,233,0.18)]"
             >
               <span className="block h-3 w-3 rounded-[3px] bg-paper" />
+              {/* queue-steering: badge col numero di messaggi in coda per il turno dopo */}
+              <AnimatePresence>
+                {queued > 0 && (
+                  <motion.span
+                    key={queued}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                    className="mono absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-signal px-1 text-[0.5rem] font-bold text-paper"
+                  >
+                    {queued}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
           ) : (
             <OriginButton
