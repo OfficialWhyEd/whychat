@@ -251,7 +251,7 @@ export default function ChatMessage({
             </div>
           )}
           {msg.content && (
-            <div className="rounded-2xl rounded-br-md border border-[var(--color-line2)] bg-[rgba(242,239,233,0.06)] px-4 py-2.5 text-[0.95rem] leading-relaxed text-paper">
+            <div className="overflow-hidden whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-[var(--color-line2)] bg-[rgba(242,239,233,0.06)] px-4 py-2.5 text-[0.95rem] leading-relaxed text-paper">
               {msg.content}
             </div>
           )}

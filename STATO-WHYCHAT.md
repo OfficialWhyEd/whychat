@@ -56,6 +56,32 @@
 
 ---
 
+## C. SESSIONE 2026-06-26 — WhyInsta + giro di rifiniture
+- ✅ **WhyInsta** (nuova modalità, 12ª): incolli un link Instagram/TikTok/YouTube e
+  WhyChat GUARDA il contenuto (trascrizione + scene + testo a schermo + "perché
+  funziona") via Gemini multimodale. Worker `/api/insta` + frontend (Mode, api,
+  wiring) + microservizio `services/insta-fetcher` (yt-dlp). Qwen2-VL NON serve.
+  Manca solo: deploy del fetcher + secret `FETCHER_URL` (passo di Edo). Build verde.
+- ✅ **WhyEntropy** reso sensato: i nodi seguono un CAMPO DI FLUSSO coerente (vortici
+  condivisi, tessuto in turbolenza) invece di rumore indipendente; rampa ordine→caos
+  non-lineare (l'ordine resta cristallino più a lungo, poi erutta). Era #5.
+- ✅ **WhyEarth** pallini brutti → globo a PUNTI con shading sferico (limb-darkening
+  + luce dall'alto-sx, colori brand). Pin della chat ora mostra anche la MINIATURA
+  del luogo (placeImage Wikipedia). Chat↔globo verificata funzionante. Era #4.
+- ✅ **Tendine** (mobile): la palette modalità non collassa più l'height di scatto —
+  chiusura trasform-based (fade+scale+slide, origine in basso, cascata inversa).
+  + bolla utente con `break-words` (niente più sforamenti su telefono). Era #7/#8.
+- ✅ **OnlyType**: flash "otturatore" di cattura all'invio (segnala il riconoscimento)
+  + prompt di creazione più esplicito ("non descrivere: realizza"). Era #7.
+- ✅ **Group Prediction**: la ricerca online degli agenti ESISTEVA già (ogni agente
+  cerca dal suo angolo prima di parlare) — resa INTELLIGENTE (gated da needsLiveInfo:
+  cerca solo se il topic lo richiede → meno latenza). Discussione tra agenti OK. Era #6.
+- ⚠️ **Logo/Wordmark**: effetto "scritta che si compone" RICOSTRUITO in `Wordmark.tsx`
+  (linea-penna luminosa che scrive WhyChat, entra→si ferma→si riscrive, ease Pixar,
+  vivo, font Loverine, niente tagli di maschera). Compila. COLLOCAZIONE da decidere
+  con Edo: metterlo nell'opener confliggerebbe con le particelle che già compongono
+  "SONO WHYCHAT" → scelta di gusto, non la forzo. Era #3.
+
 ## ❌ DA FARE — lista operativa (priorità)
 1. ❌ **Opener STATICO** (#35 quadrato rosso): l'intro + i consigli sotto "WhyChat" non devono fare lo **slide** d'entrata, devono essere **statici**. → in lavorazione adesso.
 2. ❌ **Suggerimenti dinamici personalizzati** (in basso, "aiutami a iniziare…"): il primo generale, il secondo entra **dopo un ritardo** deciso da WhyChat in base alla persona; WhyChat decide **se** mostrarli.

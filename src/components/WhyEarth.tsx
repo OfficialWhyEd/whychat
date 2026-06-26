@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { geoOrthographic, geoPath, geoGraticule, geoBounds } from "d3-geo";
 import { timer } from "d3-timer";
-import { WORKER_URL } from "../lib/api";
+import { WORKER_URL, placeImage } from "../lib/api";
 
 /**
  * WhyEarth — globo terrestre a puntini, dark e nei colori del brand (design
@@ -41,6 +41,7 @@ export default function WhyEarth({
   const flyToRef = useRef<(lng: number, lat: number) => void>(() => {});
   const pinElRef = useRef<HTMLDivElement>(null); // marcatore DOM premium sopra il canvas
   const [pinName, setPinName] = useState("");
+  const [pinImg, setPinImg] = useState<string | null>(null); // miniatura del luogo (Wikipedia)
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -124,15 +125,26 @@ export default function WhyEarth({
       context.strokeStyle = "rgba(242,239,233,0.4)";
       context.lineWidth = 0.8 * s;
       context.stroke();
-      // puntini delle terre
+      // puntini delle terre: globo a PUNTI con shading sferico. Ogni punto è
+      // illuminato in base alla posizione sulla sfera (limb-darkening) + una luce
+      // morbida dall'alto-sinistra → la Terra legge come volume 3D, non specchi
+      // marroni piatti. Colori brand: ember al centro, cremisi verso il bordo.
+      const cx0 = W / 2;
+      const cy0 = H / 2;
+      const Rg = projection.scale();
       for (const d of dots) {
         const p = projection([d.lng, d.lat]);
-        if (p && p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= H) {
-          context.beginPath();
-          context.arc(p[0], p[1], 1.1 * s, 0, 2 * Math.PI);
-          context.fillStyle = "#7a5238";
-          context.fill();
-        }
+        if (!p || p[0] < 0 || p[0] > W || p[1] < 0 || p[1] > H) continue;
+        const dx = p[0] - cx0;
+        const dy = p[1] - cy0;
+        const nd = Math.min(1, Math.hypot(dx, dy) / Rg);
+        const sphere = Math.sqrt(Math.max(0, 1 - nd * nd)); // 1 al centro → 0 al bordo
+        const lightDir = 0.5 - (dx + dy) / (Rg * 3.2); // luce dall'alto-sinistra
+        const lit = Math.max(0.22, Math.min(1, sphere * (0.62 + 0.55 * lightDir)));
+        context.beginPath();
+        context.arc(p[0], p[1], (0.65 + 0.7 * sphere) * s, 0, 2 * Math.PI);
+        context.fillStyle = `rgba(${(196 + 18 * lit) | 0},${(94 + 52 * lit) | 0},${(54 + 30 * lit) | 0},${0.2 + 0.62 * lit})`;
+        context.fill();
       }
       // voli live (se accesi) — ambra, piccoli
       if (flightsOnRef.current) {
@@ -338,6 +350,15 @@ export default function WhyEarth({
     pinRef.current = focus;
     setPinName(focus.name);
     flyToRef.current(focus.lng, focus.lat);
+    // "ti dà un'immagine del posto": miniatura keyless da Wikipedia (best-effort).
+    setPinImg(null);
+    let alive = true;
+    placeImage(focus.name).then((img) => {
+      if (alive) setPinImg(img);
+    });
+    return () => {
+      alive = false;
+    };
   }, [focus]);
 
   // voli reali — caricati solo quando il livello è acceso (refresh 25s)
@@ -395,6 +416,13 @@ export default function WhyEarth({
         className="pointer-events-none absolute left-0 top-0 z-10 flex flex-col items-center transition-opacity duration-300"
         style={{ opacity: 0 }}
       >
+        {pinImg && (
+          <img
+            src={pinImg}
+            alt={pinName}
+            className="mb-1 h-14 w-20 rounded-lg border border-[#f0c85a]/30 object-cover shadow-[0_6px_18px_rgba(0,0,0,0.5)]"
+          />
+        )}
         {pinName && (
           <span className="mono mb-1 whitespace-nowrap rounded-full border border-[#f0c85a]/40 bg-[rgba(16,13,11,0.82)] px-2 py-0.5 text-[0.6rem] text-[#f3e3b0] backdrop-blur">
             {pinName}
