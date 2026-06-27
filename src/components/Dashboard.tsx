@@ -46,18 +46,20 @@ const MODE_LABEL: Record<string, string> = {
   canvas: "Canvas",
 };
 
+// Palette CALDA coerente col brand (cremisi → ambra → oro). Niente arcobaleno
+// AI (viola/teal/lime/blu): un'unica famiglia, distinguibile per tono/luminosità.
 const MODE_COLOR: Record<string, string> = {
-  chat: "#c94b25",
-  deep: "#7c5cff",
-  reason: "#2dd4bf",
-  sheet: "#f0a36a",
-  group: "#e0673f",
-  earth: "#38bdf8",
-  entropy: "#d946ef",
-  music: "#f43f5e",
-  ecosystem: "#84cc16",
-  learn: "#facc15",
-  canvas: "#fb923c",
+  chat: "#c94b25", // cremisi (primario)
+  deep: "#8c3a1f", // brick scuro
+  reason: "#e8a35c", // ambra
+  sheet: "#f0a36a", // pesca
+  group: "#d9542e", // arancio-rosso
+  earth: "#b8702f", // ocra
+  entropy: "#a63d4e", // vino caldo (rosso-rosa, non magenta)
+  music: "#e0673f", // ember
+  ecosystem: "#9c7a3a", // oliva-oro caldo
+  learn: "#e8c06a", // oro
+  canvas: "#db6b3a", // arancio bruciato
 };
 
 function flag(cc: string): string {
@@ -158,6 +160,21 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* skeleton di caricamento (invece di un generico spinner) */}
+      {loading && !entries && (
+        <div className="animate-pulse">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-[5.2rem] rounded-2xl border border-[var(--color-line)] bg-[rgba(242,239,233,0.03)]" />
+            ))}
+          </div>
+          <div className="mb-6 h-40 rounded-2xl border border-[var(--color-line)] bg-[rgba(242,239,233,0.02)]" />
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="mb-3 h-16 rounded-2xl border border-[var(--color-line)] bg-[rgba(242,239,233,0.02)]" />
+          ))}
+        </div>
+      )}
+
       {err && <div className="mb-4 text-sm text-signal-soft">{err}</div>}
       {note && (
         <div className="mb-6 rounded-xl border border-[var(--color-line2)] bg-[rgba(240,163,106,0.06)] p-4 text-[0.8rem] text-ember">
@@ -204,10 +221,15 @@ export default function Dashboard() {
               const open = openId === v.id;
               const topMode = Object.entries(v.modes).sort((a, b) => b[1] - a[1]);
               return (
-                <div key={v.id} className="rounded-2xl border border-[var(--color-line)] bg-[rgba(242,239,233,0.02)]">
+                <div
+                  key={v.id}
+                  className={`overflow-hidden rounded-2xl border bg-[rgba(242,239,233,0.02)] transition-colors ${
+                    open ? "border-signal/30" : "border-[var(--color-line)] hover:border-[var(--color-line2)]"
+                  }`}
+                >
                   <button
                     onClick={() => setOpenId(open ? null : v.id)}
-                    className="flex w-full items-center gap-3 p-4 text-left"
+                    className="flex w-full items-center gap-3 p-4 text-left transition-transform active:scale-[0.99]"
                   >
                     <span className="text-lg">{flag([...v.countries][0] ?? "??")}</span>
                     <div className="min-w-0 flex-1">
