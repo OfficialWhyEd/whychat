@@ -126,6 +126,7 @@ interface Props {
   onTogglePlan?: () => void;
   name?: string; // se noto, WhyChat personalizza i suggerimenti (dopo il primo, generale)
   queued?: number; // queue-steering: messaggi in coda mentre WhyChat sta rispondendo
+  splitView?: boolean; // pannello artifact aperto → niente glass WebGL (si rompe al resize)
 }
 
 // plan mode disponibile in TUTTE le modalità non-beta (utile ovunque)
@@ -140,7 +141,7 @@ function looksComplex(t: string): boolean {
   );
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0 }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0, splitView = false }: Props) {
   // Suggerimenti: il PRIMO è sempre generale; se WhyChat conosce la persona, dal
   // secondo in poi (quindi "dopo un tot") entrano frasi personalizzate col nome.
   const placeholders = name
@@ -157,9 +158,12 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const reduce = useReducedMotion();
   // liquid glass: misura la barra per dimensionare la mappa-lente di rifrazione
   const [glassSize, setGlassSize] = useState({ w: 0, h: 0 });
-  const lgOn = useRef(svgBackdropSupported()).current;
+  // In split-view (pannello artifact aperto) il glass WebGL/SVG campiona lo sfondo
+  // con una mappatura che si rompe al resize → barra "color crema" sganciata. Lì
+  // usiamo il glass solido (CSS), robusto. Niente bug.
+  const lgOn = useRef(svgBackdropSupported()).current && !splitView;
   // vetro WebGL VERO (campiona+rifrange lo sfondo, funziona anche su iPhone)
-  const glOn = useRef(liquidGLSupported()).current;
+  const glOn = useRef(liquidGLSupported()).current && !splitView;
   // "Armato": c'è testo o almeno un allegato. Il primario si accende.
   const armed = (value.trim().length > 0 || attachments.length > 0) && !disabled;
 
