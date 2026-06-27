@@ -334,10 +334,34 @@ function Chat() {
         // WhyInsta: incolli un link social → WhyChat GUARDA il contenuto.
         const link = (sentContent.match(SOCIAL_URL_RE) || [])[0];
         if (!link) {
-          patch(
-            "Incollami un **link Instagram** (o TikTok/YouTube) e lo guardo davvero — ti racconto cosa succede, cosa viene detto e perché funziona. Puoi anche aggiungere una domanda accanto al link.",
-            true,
-          );
+          // Nessun link nel messaggio. Se in questa chat WhyChat ha GIÀ guardato
+          // un reel, NON perdere il contesto: continua la conversazione in chat
+          // normale (veloce, Groq) con tutta la storia — così i follow-up sul reel
+          // funzionano perfettamente. Solo a chat vuota chiede il link.
+          const reelGiaGuardato = baseMessages.some((m) => m.role === "assistant" && m.content.trim().length > 0);
+          if (reelGiaGuardato) {
+            const ctrl = new AbortController();
+            abortRef.current = ctrl;
+            let acc = "";
+            await streamChat(
+              history,
+              (d) => {
+                acc += d;
+                patch(acc);
+              },
+              ctrl.signal,
+              "chat",
+              model,
+              webSearch,
+            );
+            patch(acc, true);
+            if (autoTtsRef.current) speak(acc);
+          } else {
+            patch(
+              "Incollami un **link Instagram** (o TikTok/YouTube) e lo guardo davvero — ti racconto cosa succede, cosa viene detto e perché funziona. Puoi anche aggiungere una domanda accanto al link.",
+              true,
+            );
+          }
         } else {
           const ctrl = new AbortController();
           abortRef.current = ctrl;
