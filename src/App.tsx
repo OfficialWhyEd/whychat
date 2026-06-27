@@ -900,6 +900,7 @@ function Chat() {
               onTogglePlan={() => setPlanMode((p) => !p)}
               name={name}
               queued={queuedCount}
+              splitView={!!artifact}
             />
             <p className="mx-auto mt-2.5 max-w-md text-center text-[0.6rem] leading-relaxed text-faint">
               <span className="text-dim/70">{modelName(model)}</span> · le conversazioni possono
