@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { relativeTime, type Chat } from "../lib/chats";
+import { relativeTime, prettyTitle, type Chat } from "../lib/chats";
 import Logo from "./Logo";
 import { MODES, type Mode } from "./CommandComposer";
 import { ProtocolBadge } from "./ProtocolBadge";
@@ -152,6 +152,13 @@ export default function Sidebar({
                           isActive ? "bg-[rgba(201,75,37,0.14)]" : "hover:bg-[rgba(242,239,233,0.04)]"
                         }`}
                       >
+                        {isActive && (
+                          <motion.span
+                            layoutId="chat-active-accent"
+                            className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full bg-signal"
+                            transition={{ type: "spring", stiffness: 520, damping: 36 }}
+                          />
+                        )}
                         {isEditing ? (
                           <input
                             ref={inputRef}
@@ -183,7 +190,7 @@ export default function Sidebar({
                                 isActive ? "text-paper" : "text-dim"
                               }`}
                             >
-                              {c.title}
+                              {prettyTitle(c.title)}
                             </span>
                             <span className="mono shrink-0 text-[0.5rem] text-faint transition-opacity group-hover:opacity-0">
                               {relativeTime(c.ts)}

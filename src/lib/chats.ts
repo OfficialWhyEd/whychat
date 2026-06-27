@@ -61,8 +61,27 @@ export function saveChats(chats: Chat[]) {
   }
 }
 
+// Un link social grezzo è un brutto titolo: lo sostituisce con un'etichetta
+// pulita ("Reel Instagram", "Video TikTok", "Video YouTube"). Se accanto al
+// link c'è anche del testo, lo tiene.
+function cleanSocialLabel(text: string): string {
+  const social = /https?:\/\/(?:www\.)?(instagram\.com|instagr\.am|tiktok\.com|vm\.tiktok\.com|youtube\.com|youtu\.be)\/\S*/i;
+  const m = social.exec(text);
+  if (!m) return text;
+  const host = m[1].toLowerCase();
+  const label = host.includes("instagr") ? "Reel Instagram" : host.includes("tiktok") ? "Video TikTok" : "Video YouTube";
+  const rest = text.replace(m[0], "").trim();
+  return rest ? `${label} · ${rest}` : label;
+}
+
 export function titleFrom(text: string): string {
-  const t = text.trim().replace(/\s+/g, " ");
+  const t = cleanSocialLabel(text.trim().replace(/\s+/g, " "));
+  return t.length > 46 ? t.slice(0, 46) + "…" : t || "Nuova conversazione";
+}
+
+// Per le chat GIÀ salvate (titolo vecchio con URL grezzo): pulisce in display.
+export function prettyTitle(title: string): string {
+  const t = cleanSocialLabel(title.trim().replace(/\s+/g, " "));
   return t.length > 46 ? t.slice(0, 46) + "…" : t || "Nuova conversazione";
 }
 
