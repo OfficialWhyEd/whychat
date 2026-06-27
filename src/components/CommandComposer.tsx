@@ -4,8 +4,8 @@ import OriginButton from "./OriginButton";
 import { Typewriter } from "./Typewriter";
 import { voice } from "../lib/tts";
 import { AnimatedIcon } from "./effects/AnimatedIcon";
-import { LiquidGlassFilter, svgBackdropSupported } from "./effects/LiquidGlass";
-import LiquidGlassGL, { liquidGLSupported } from "./effects/LiquidGlassGL";
+import { LiquidGlassFilter } from "./effects/LiquidGlass";
+import LiquidGlassGL from "./effects/LiquidGlassGL";
 import FileChip from "./FileChip";
 import {
   MessageSquare,
@@ -141,7 +141,7 @@ function looksComplex(t: string): boolean {
   );
 }
 
-export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0, splitView = false }: Props) {
+export default function CommandComposer({ onSend, disabled, mode, onMode, onStop, streaming, search, onToggleSearch, plan, onTogglePlan, name, queued = 0 }: Props) {
   // Suggerimenti: il PRIMO è sempre generale; se WhyChat conosce la persona, dal
   // secondo in poi (quindi "dopo un tot") entrano frasi personalizzate col nome.
   const placeholders = name
@@ -158,12 +158,12 @@ export default function CommandComposer({ onSend, disabled, mode, onMode, onStop
   const reduce = useReducedMotion();
   // liquid glass: misura la barra per dimensionare la mappa-lente di rifrazione
   const [glassSize, setGlassSize] = useState({ w: 0, h: 0 });
-  // In split-view (pannello artifact aperto) il glass WebGL/SVG campiona lo sfondo
-  // con una mappatura che si rompe al resize → barra "color crema" sganciata. Lì
-  // usiamo il glass solido (CSS), robusto. Niente bug.
-  const lgOn = useRef(svgBackdropSupported()).current && !splitView;
-  // vetro WebGL VERO (campiona+rifrange lo sfondo, funziona anche su iPhone)
-  const glOn = useRef(liquidGLSupported()).current && !splitView;
+  // GLASS SOLIDO SEMPRE. Il vetro WebGL/SVG campionava lo sfondo e lo amplificava
+  // (×2): quando la barra cresce scrivendo, o lo sfondo dietro è chiaro, sbianca a
+  // "color crema" → inaccettabile su un input che si usa di continuo. Tolto.
+  // Resta un glass scuro frosted robusto (vedi style sotto: ring + sheen + blur).
+  const lgOn = false;
+  const glOn = false;
   // "Armato": c'è testo o almeno un allegato. Il primario si accende.
   const armed = (value.trim().length > 0 || attachments.length > 0) && !disabled;
 
