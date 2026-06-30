@@ -23,9 +23,17 @@ interface Activity {
   mode: string | null;
   user: string;
 }
+interface DayStat {
+  date: string;
+  msgs: number;
+  modes: Record<string, number>;
+  countries: Record<string, number>;
+  visitors: number;
+}
 interface AdminData {
   visitors: Visitor[];
   recent: Activity[];
+  daily?: DayStat[];
   stats: {
     visitors: number;
     named?: number;
@@ -105,6 +113,45 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   }, []);
+
+  // ── azioni admin: libera spazio (prune) + diritto all'oblio (forget) ──────
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState("");
+
+  const prune = useCallback(async () => {
+    if (!confirm("Libero spazio nel KV: cancella i log grezzi più vecchi (tiene gli ultimi 500). Statistiche e memoria utenti restano intatte. Procedo?")) return;
+    setBusy("prune");
+    setNotice("");
+    try {
+      const res = await fetch(`${WORKER_URL}/api/admin/prune?pass=${encodeURIComponent(pass)}`, { method: "POST" });
+      const j = (await res.json()) as { deleted?: number; kept?: number; error?: string };
+      setNotice(j.error ? `Errore: ${j.error}` : `Spazio liberato: ${j.deleted ?? 0} log cancellati, ${j.kept ?? 0} tenuti.`);
+      load(pass);
+    } catch {
+      setNotice("Errore di rete nel prune.");
+    } finally {
+      setBusy("");
+    }
+  }, [pass, load]);
+
+  const forget = useCallback(
+    async (id: string, label: string) => {
+      if (!confirm(`Diritto all'oblio (GDPR): cancello TUTTI i dati di "${label}" (memoria, skill, profilo). Irreversibile. Procedo?`)) return;
+      setBusy(id);
+      setNotice("");
+      try {
+        const res = await fetch(`${WORKER_URL}/api/admin/forget?pass=${encodeURIComponent(pass)}&id=${encodeURIComponent(id)}`, { method: "POST" });
+        const j = (await res.json()) as { ok?: boolean; error?: string };
+        setNotice(j.error ? `Errore: ${j.error}` : `Dati di "${label}" cancellati.`);
+        load(pass);
+      } catch {
+        setNotice("Errore di rete nella cancellazione.");
+      } finally {
+        setBusy("");
+      }
+    },
+    [pass, load],
+  );
 
   useEffect(() => {
     if (pass) load(pass);
@@ -216,6 +263,61 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* notice azioni */}
+        {notice && (
+          <div className="mb-4 rounded-xl border border-signal/30 bg-[rgba(201,75,37,0.07)] px-4 py-2.5 text-[0.78rem] text-paper">
+            {notice}
+          </div>
+        )}
+
+        {/* TREND GIORNALIERO — dagli aggregati compatti stat:<data> */}
+        {(() => {
+          const daily = data.daily ?? [];
+          if (daily.length === 0) return null;
+          const max = Math.max(1, ...daily.map((d) => d.msgs));
+          const totMsg = daily.reduce((s, d) => s + d.msgs, 0);
+          const peak = daily.reduce((a, b) => (b.msgs > a.msgs ? b : a), daily[0]);
+          return (
+            <div className="mb-6 rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] p-4">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="mono text-[0.6rem] uppercase tracking-wider text-faint">Attività · ultimi {daily.length} giorni</h2>
+                <span className="mono text-[0.55rem] text-dim">{totMsg} messaggi</span>
+              </div>
+              <div className="flex h-20 items-end gap-[3px]">
+                {daily.map((d) => (
+                  <div
+                    key={d.date}
+                    title={`${d.date} · ${d.msgs} messaggi · ${d.visitors} persone`}
+                    className="group flex-1 rounded-t-sm bg-gradient-to-t from-signal/40 to-ember/80 transition hover:from-signal hover:to-ember"
+                    style={{ height: `${Math.max(3, (d.msgs / max) * 100)}%` }}
+                  />
+                ))}
+              </div>
+              <div className="mono mt-2 flex justify-between text-[0.5rem] text-faint">
+                <span>{daily[0].date.slice(5)}</span>
+                <span className="text-ember/70">picco {peak.msgs} il {peak.date.slice(5)}</span>
+                <span>{daily[daily.length - 1].date.slice(5)}</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* SPAZIO & CONFORMITÀ — controllo storage + GDPR */}
+        <div className="mb-7 rounded-2xl border border-[var(--color-line2)] bg-[rgba(242,239,233,0.02)] p-4">
+          <h2 className="mono mb-2 text-[0.6rem] uppercase tracking-wider text-faint">Spazio & conformità</h2>
+          <p className="mb-3 text-[0.78rem] leading-relaxed text-dim">
+            I log grezzi si cancellano dopo <span className="text-paper">30 giorni</span>; le statistiche restano compatte e
+            senza testo personale. IP solo in hash. Diritto all'oblio per ogni utente qui sotto.
+          </p>
+          <button
+            onClick={prune}
+            disabled={busy === "prune"}
+            className="mono rounded-full border border-signal/40 px-3.5 py-1.5 text-[0.6rem] uppercase tracking-wider text-ember transition hover:bg-[rgba(201,75,37,0.1)] disabled:opacity-40"
+          >
+            {busy === "prune" ? "Libero…" : "Libera spazio ora"}
+          </button>
+        </div>
+
         {/* visitatori */}
         <h2 className="mono mb-2 text-[0.6rem] uppercase tracking-wider text-faint">Utenti</h2>
         <div className="mb-7 flex flex-col gap-2">
@@ -282,6 +384,16 @@ export default function AdminDashboard() {
                       ))}
                     </ul>
                   )}
+                  {/* diritto all'oblio GDPR */}
+                  <div className="mt-3 border-t border-[var(--color-line)] pt-2.5">
+                    <button
+                      onClick={() => forget(v.id, v.name ?? "Anonimo")}
+                      disabled={busy === v.id}
+                      className="mono text-[0.55rem] uppercase tracking-wider text-faint transition hover:text-signal-soft disabled:opacity-40"
+                    >
+                      {busy === v.id ? "Cancello…" : "Dimentica questo utente"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
