@@ -138,10 +138,21 @@ export default function SoulParticles({
       off.width = ow;
       off.height = oh;
       const o = off.getContext("2d")!;
-      const fs = Math.min(108, (ow / Math.max(word.length, 7)) * 1.7);
-      o.fillStyle = "#fff";
       // display espressivo: stesso carattere del wordmark
-      o.font = `900 ${fs}px "Fraunces", "DM Serif Display", serif`;
+      const setFont = (s: number) => (o.font = `900 ${s}px "Fraunces", "DM Serif Display", serif`);
+      // RIDUCI-PER-ENTRARE: parti ambizioso poi misura la larghezza REALE e rimpicciolisci
+      // finché la parola sta dentro al riquadro (con margine). Niente più euristica che
+      // sottostima il Fraunces 900 → le lettere ai bordi non vengono più tagliate.
+      const maxW = ow * 0.9;
+      const maxH = oh * 0.8;
+      let fs = Math.min(108, maxH);
+      setFont(fs);
+      const measured = o.measureText(word).width;
+      if (measured > maxW) {
+        fs = Math.max(14, Math.floor(fs * (maxW / measured)));
+        setFont(fs);
+      }
+      o.fillStyle = "#fff";
       o.textAlign = "center";
       o.textBaseline = "middle";
       o.fillText(word, ow / 2, oh / 2);
